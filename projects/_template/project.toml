@@ -1,0 +1,32 @@
+name = "{{project}}"
+
+[app]
+url = "http://127.0.0.1:5173/"   # page the demo starts on
+ready = ""                       # Playwright selector visible once the app is usable, e.g. "role=navigation"
+
+[browser]
+width = 1440
+height = 900
+locale = "en-US"                 # also the language of the browser UI and date formats
+timezone = "UTC"
+channel = ""                     # "chrome" = installed Google Chrome, empty = Playwright Chromium
+safe_top = 80                    # px covered by fixed bars at the top, elements above it get scrolled into view
+safe_bottom = 60
+fixed_header = 0                 # px height of a fixed header, its elements are never scrolled to
+scroll = true                    # click/hover first wheel-scroll the target into view. false for canvas apps,
+                                 # where the wheel pans or zooms instead of scrolling
+
+[recording]
+fps = 30
+crf = 20                         # x264 quality, lower = bigger and sharper
+scale = 2                        # device pixels per CSS pixel, 2 = a 2880x1800 video from the 1440x900 browser
+before = ""                      # shell command run in this folder before every record/check, e.g. "pwsh -File reset.ps1"
+
+# Login form, filled before every run. Uncomment if the app needs a login. For other login
+# flows define login(a) in helpers.py instead. Values here are the Keycloak defaults.
+# [login]
+# username_env = "DEMOREC_USERNAME"
+# password_env = "DEMOREC_PASSWORD"
+# username_selector = "#username"
+# password_selector = "#password"
+# submit_selector = "#kc-login"

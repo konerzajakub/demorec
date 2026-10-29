@@ -1,0 +1,17 @@
+name = "example"
+
+[app]
+url = "./site/index.html"
+ready = "role=table[name='Tasks']"
+
+[browser]
+width = 1280
+height = 720
+locale = "en-US"
+timezone = "Europe/Prague"
+safe_top = 70
+fixed_header = 56
+
+[recording]
+fps = 30
+crf = 20

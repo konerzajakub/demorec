@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Tasks</title>
+<style>
+  body { margin: 0; font: 15px/1.4 system-ui, sans-serif; color: #1d2433; background: #f4f6f9; }
+  header { position: fixed; top: 0; left: 0; right: 0; height: 56px; background: #1f3a5f; color: #fff;
+           display: flex; align-items: center; gap: 24px; padding: 0 24px; }
+  header h1 { font-size: 18px; margin: 0; }
+  nav a { color: #cfe0f5; text-decoration: none; margin-right: 16px; }
+  nav a[aria-current] { color: #fff; font-weight: 600; }
+  main { padding: 80px 24px 24px; max-width: 900px; }
+  .bar { display: flex; gap: 12px; align-items: center; margin-bottom: 16px; }
+  button { font: inherit; padding: 8px 14px; border-radius: 6px; border: 1px solid #1f3a5f; background: #fff; cursor: pointer; }
+  button.primary { background: #1f3a5f; color: #fff; }
+  select, input, textarea { font: inherit; padding: 7px 9px; border: 1px solid #b8c2d0; border-radius: 6px; }
+  table { width: 100%; border-collapse: collapse; background: #fff; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #e3e8ef; }
+  .chip { padding: 2px 8px; border-radius: 10px; font-size: 13px; background: #e3e8ef; }
+  .chip.done { background: #d5f0dc; } .chip.open { background: #fdf0c8; }
+  dialog { border: none; border-radius: 10px; padding: 24px; width: 420px; box-shadow: 0 10px 40px #0003; }
+  dialog label { display: block; margin: 10px 0 4px; }
+  dialog input, dialog textarea, dialog select { width: 100%; box-sizing: border-box; }
+  .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+  #toast { position: fixed; bottom: 24px; right: 24px; background: #1d2433; color: #fff; padding: 10px 16px; border-radius: 6px; display: none; }
+</style>
+</head>
+<body>
+<header><h1>Tasks</h1><nav aria-label="Main"><a href="#" aria-current="page">Task list</a><a href="#">Reports</a></nav></header>
+<main>
+  <div class="bar">
+    <button class="primary" id="new">New task</button>
+    <label for="filter">Status</label>
+    <select id="filter"><option value="">All</option><option value="open">Open</option><option value="done">Done</option></select>
+  </div>
+  <table aria-label="Tasks">
+    <thead><tr><th>Task</th><th>Owner</th><th>Due</th><th>Status</th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+</main>
+<dialog id="dlg" aria-labelledby="dlg-title">
+  <h2 id="dlg-title">New task</h2>
+  <form method="dialog" id="form">
+    <label for="title">Title</label><input id="title" required>
+    <label for="owner">Owner</label><select id="owner"><option>Operator One</option><option>Operator Two</option></select>
+    <label for="due">Due date</label><input id="due" type="date">
+    <div class="actions"><button value="cancel" formnovalidate>Cancel</button><button class="primary" value="save">Save</button></div>
+  </form>
+</dialog>
+<div id="toast" role="status"></div>
+<script>
+  const tasks = [
+    { title: "Calibrate the scale", owner: "Operator One", due: "2026-11-02", status: "open" },
+    { title: "Order reagents", owner: "Operator Two", due: "2026-10-30", status: "done" },
+    { title: "Archive September samples", owner: "Operator One", due: "2026-11-10", status: "open" },
+  ];
+  const $ = s => document.querySelector(s);
+  function render() {
+    const f = $("#filter").value;
+    $("#rows").innerHTML = tasks.filter(t => !f || t.status === f).map(t =>
+      `<tr><td>${t.title}</td><td>${t.owner}</td><td>${t.due || ""}</td><td><span class="chip ${t.status}">${t.status === "done" ? "Done" : "Open"}</span></td></tr>`).join("");
+  }
+  $("#new").onclick = () => { $("#form").reset(); $("#dlg").showModal(); };
+  $("#filter").onchange = render;
+  $("#dlg").addEventListener("close", () => {
+    if ($("#dlg").returnValue !== "save") return;
+    tasks.unshift({ title: $("#title").value, owner: $("#owner").value, due: $("#due").value, status: "open" });
+    render();
+    $("#toast").textContent = "Task created"; $("#toast").style.display = "block";
+    setTimeout(() => $("#toast").style.display = "none", 2500);
+  });
+  render();
+</script>
+</body>
+</html>

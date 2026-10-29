@@ -1,0 +1,40 @@
+diff --git a/projects/excalidraw/helpers.py b/projects/excalidraw/helpers.py
+index 9f4d8b9..c247a77 100644
+--- a/projects/excalidraw/helpers.py
++++ b/projects/excalidraw/helpers.py
+@@ -20,10 +20,31 @@ def tool(a, name, after=500):
+     a.click(tool_button(a, name), after=after)
+ 
+ 
+-def box(a, x0, y0, x1, y1, label):
++def box(a, x0, y0, x1, y1, label, delay=90, dur=0.9, after=500):
+     """Draw a rectangle and type a label into it (Enter on a selected shape opens its text)."""
+-    tool(a, "Rectangle")
+-    a.drag(x0, y0, x1, y1)
++    tool(a, "Rectangle", after=after)
++    a.drag(x0, y0, x1, y1, dur=dur, after=after)
+     a.key("Enter", after=400)
+-    a.write(label, delay=90, after=400)
++    a.write(label, delay=delay, after=400)
+     a.key("Escape", after=600)
++
++
++def arrow(a, x0, y0, x1, y1, dur=0.6, after=500):
++    """Draw an arrow. A start or end point on a shape's edge connects the arrow to that shape."""
++    tool(a, "Arrow", after=after)
++    a.drag(x0, y0, x1, y1, dur=dur, after=after)
++    a.key("Escape", after=300)
++
++
++def background(a, color):
++    """Pick a Background color for the selected shape. Excalidraw gives the next new shape the last
++    Background used, so pick "transparent" after a colored shape or the next one comes out filled."""
++    panel = a.pg.get_by_role("region", name="Selected shape actions")
++    a.click(panel.get_by_role("button", name=color, exact=True), after=600)
++
++
++def fill(a, x, y, color):
++    """Select a shape by a point on its outline, then pick its Background color.
++    Shapes without fill only select from the outline, so x, y sits a few px inside the top edge."""
++    a.click_at(x, y, after=400)
++    background(a, color)

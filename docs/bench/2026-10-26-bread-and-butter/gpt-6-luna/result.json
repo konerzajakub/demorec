@@ -1,0 +1,57 @@
+{
+  "project": "excalidraw",
+  "demo": "bread-and-butter",
+  "mode": "record",
+  "status": "ok",
+  "started": "2026-10-28T17:52:13",
+  "chapters": [
+    {
+      "title": "Blank canvas",
+      "start": 1.52,
+      "keyframe": "keyframes/01-blank-canvas.jpg"
+    },
+    {
+      "title": "Title",
+      "start": 4.19,
+      "keyframe": "keyframes/02-title.jpg"
+    },
+    {
+      "title": "Ingredients",
+      "start": 12.47,
+      "keyframe": "keyframes/03-ingredients.jpg"
+    },
+    {
+      "title": "Steps",
+      "start": 38.27,
+      "keyframe": "keyframes/04-steps.jpg"
+    },
+    {
+      "title": "What goes where",
+      "start": 71.6,
+      "keyframe": "keyframes/05-what-goes-where.jpg"
+    },
+    {
+      "title": "Colors",
+      "start": 92.82,
+      "keyframe": "keyframes/06-colors.jpg"
+    },
+    {
+      "title": "Tip",
+      "start": 102.63,
+      "keyframe": "keyframes/07-tip.jpg"
+    },
+    {
+      "title": "Done",
+      "start": 117.83,
+      "keyframe": "keyframes/08-done.jpg"
+    }
+  ],
+  "missing_moments": [],
+  "unplanned_chapters": [],
+  "video": "bread-and-butter.mp4",
+  "duration_s": 140.86,
+  "chapters_vtt": "chapters.vtt",
+  "contact_sheet": "contact.jpg (one frame every 9 s, left to right, top to bottom)",
+  "run_s": 203.2,
+  "model": "gpt-6-luna"
+}

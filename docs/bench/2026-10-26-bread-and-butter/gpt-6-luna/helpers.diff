@@ -1,0 +1,70 @@
+diff --git a/projects/excalidraw/helpers.py b/projects/excalidraw/helpers.py
+index 9f4d8b9..0538c63 100644
+--- a/projects/excalidraw/helpers.py
++++ b/projects/excalidraw/helpers.py
+@@ -15,7 +15,7 @@ def tool_button(a, name):
+     return bar.get_by_role("button", name=name, exact=True).or_(bar.get_by_role("radio", name=name, exact=True))
+ 
+ 
+-def tool(a, name, after=500):
++def tool(a, name, after=250):
+     """Pick a tool in the top toolbar, e.g. "Rectangle", "Arrow"."""
+     a.click(tool_button(a, name), after=after)
+ 
+@@ -23,7 +23,52 @@ def tool(a, name, after=500):
+ def box(a, x0, y0, x1, y1, label):
+     """Draw a rectangle and type a label into it (Enter on a selected shape opens its text)."""
+     tool(a, "Rectangle")
+-    a.drag(x0, y0, x1, y1)
+-    a.key("Enter", after=400)
+-    a.write(label, delay=90, after=400)
+-    a.key("Escape", after=600)
++    a.drag(x0, y0, x1, y1, dur=0.55, after=250)
++    a.key("Enter", after=200)
++    a.write(label, delay=90, after=250)
++    a.key("Escape", after=300)
++
++
++def ellipse(a, x0, y0, x1, y1, label):
++    """Draw and label an ellipse."""
++    tool(a, "Ellipse")
++    a.drag(x0, y0, x1, y1, dur=0.55, after=250)
++    a.key("Enter", after=200)
++    a.write(label, delay=90, after=250)
++    a.key("Escape", after=300)
++
++
++def canvas_text(a, x, y, text):
++    """Place free text on the canvas."""
++    tool(a, "Text")
++    a.click_at(x, y, after=250)
++    a.write(text, delay=80, after=250)
++    a.key("Escape", after=300)
++
++
++def arrow(a, x0, y0, x1, y1):
++    """Draw an arrow between two canvas points."""
++    tool(a, "Arrow", after=250)
++    a.drag(x0, y0, x1, y1, dur=0.55, after=250)
++
++
++def deselect(a):
++    """Escape selection so selection handles and properties do not cover the canvas."""
++    a.key("Escape", after=150)
++
++
++def park_cursor(a):
++    """Move the cursor out of the drawing before a chapter keyframe."""
++    a.move(1210, 630, dur=0.4)
++
++
++def fill_shape(a, x, y, color):
++    """Select a canvas shape and set its background color."""
++    a.click_at(x, y, after=500)
++    fill_selected(a, color)
++
++
++def fill_selected(a, color):
++    """Set the background color of the currently selected shape."""
++    panel = a.pg.get_by_role("region", name="Selected shape actions")
++    a.click(panel.get_by_role("button", name=color, exact=True), after=700)

@@ -1,0 +1,57 @@
+{
+  "project": "excalidraw",
+  "demo": "bread-and-butter",
+  "mode": "record",
+  "status": "ok",
+  "started": "2026-10-28T18:03:41",
+  "chapters": [
+    {
+      "title": "Blank canvas",
+      "start": 1.52,
+      "keyframe": "keyframes/01-blank-canvas.jpg"
+    },
+    {
+      "title": "Title",
+      "start": 5.14,
+      "keyframe": "keyframes/02-title.jpg"
+    },
+    {
+      "title": "Ingredients",
+      "start": 11.72,
+      "keyframe": "keyframes/03-ingredients.jpg"
+    },
+    {
+      "title": "Steps",
+      "start": 37.92,
+      "keyframe": "keyframes/04-steps.jpg"
+    },
+    {
+      "title": "What goes where",
+      "start": 70.26,
+      "keyframe": "keyframes/05-what-goes-where.jpg"
+    },
+    {
+      "title": "Colors",
+      "start": 91.15,
+      "keyframe": "keyframes/06-colors.jpg"
+    },
+    {
+      "title": "Tip",
+      "start": 99.29,
+      "keyframe": "keyframes/07-tip.jpg"
+    },
+    {
+      "title": "Done",
+      "start": 111.38,
+      "keyframe": "keyframes/08-done.jpg"
+    }
+  ],
+  "missing_moments": [],
+  "unplanned_chapters": [],
+  "video": "bread-and-butter.mp4",
+  "duration_s": 129.8,
+  "chapters_vtt": "chapters.vtt",
+  "contact_sheet": "contact.jpg (one frame every 8 s, left to right, top to bottom)",
+  "run_s": 183.4,
+  "model": "claude-haiku-5-5"
+}

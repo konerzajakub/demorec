@@ -1,0 +1,77 @@
+diff --git a/projects/excalidraw/helpers.py b/projects/excalidraw/helpers.py
+index 9f4d8b9..141779c 100644
+--- a/projects/excalidraw/helpers.py
++++ b/projects/excalidraw/helpers.py
+@@ -15,15 +15,60 @@ def tool_button(a, name):
+     return bar.get_by_role("button", name=name, exact=True).or_(bar.get_by_role("radio", name=name, exact=True))
+ 
+ 
+-def tool(a, name, after=500):
+-    """Pick a tool in the top toolbar, e.g. "Rectangle", "Arrow"."""
+-    a.click(tool_button(a, name), after=after)
+-
+-
+-def box(a, x0, y0, x1, y1, label):
+-    """Draw a rectangle and type a label into it (Enter on a selected shape opens its text)."""
+-    tool(a, "Rectangle")
+-    a.drag(x0, y0, x1, y1)
+-    a.key("Enter", after=400)
+-    a.write(label, delay=90, after=400)
+-    a.key("Escape", after=600)
++def tool(a, name, after=500, key=None):
++    """Pick a tool in the top toolbar, e.g. "Rectangle", "Arrow". key: its keyboard shortcut (the
++    number next to the button), a faster way to pick the same tool again and again."""
++    if key:
++        a.key(key, after=after)
++    else:
++        a.click(tool_button(a, name), after=after)
++
++
++def box(a, x0, y0, x1, y1, label, shape="Rectangle", delay=90, dur=0.9, after=500, key=None, before=None):
++    """Draw a shape and type a label into it (Enter on a selected shape opens its text).
++    The defaults are the pace of the first demos, a longer demo passes smaller values.
++    before(a) runs once the tool is active and before the shape is drawn, e.g. to pick a color."""
++    tool(a, shape, after=after, key=key)
++    if before:
++        before(a)
++    a.drag(x0, y0, x1, y1, dur=dur, after=after)
++    a.key("Enter", after=max(after - 100, 150))   # the text editor needs a moment to open
++    a.write(label, delay=delay, after=max(after - 100, 100))
++    a.key("Escape", after=after + 100)
++
++
++def arrow(a, x0, y0, x1, y1, dur=0.9, after=500, key=None):
++    """Draw an arrow between two points. Start and end a few px outside the shapes, so they bind."""
++    tool(a, "Arrow", after=after, key=key)
++    a.drag(x0, y0, x1, y1, dur=dur, after=after)
++    a.key("Escape", after=max(after - 100, 100))
++
++
++def deselect(a, after=300):
++    """Nothing selected and the properties panel closed. The first Escape ends a text edit or a
++    tool, the second clears the selection. The mouse does not move."""
++    a.key("Escape", after=150)
++    a.key("Escape", after=after)
++
++
++def background(a, color, after=300):
++    """Background color for the next shapes. Excalidraw keeps the last color picked and gives it
++    to every new shape, so a color has to be set back ("transparent") after it was used. With a
++    drawing tool active the panel on the left shows the swatches."""
++    panel = a.pg.get_by_role("region", name="Selected shape actions")
++    a.click(panel.get_by_role("button", name=color, exact=True), after=after)
++
++
++def title_text(a, x, y, text, delay=70, after=400):
++    """Text without a container: pick the Text tool, click the canvas, type."""
++    tool(a, "Text", after=after)
++    a.click_at(x, y, after=after)
++    a.write(text, delay=delay, after=after)
++    a.key("Escape", after=after + 200)
++
++
++def fill(a, x, y, color, after=600):
++    """Select the shape whose top edge is at (x, y) and pick a Background color in the panel."""
++    a.click_at(x, y, after=after)
++    panel = a.pg.get_by_role("region", name="Selected shape actions")
++    a.click(panel.get_by_role("button", name=color, exact=True), after=after + 300)

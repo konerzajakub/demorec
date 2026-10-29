@@ -1,0 +1,93 @@
+diff --git a/projects/excalidraw/helpers.py b/projects/excalidraw/helpers.py
+index 9f4d8b9..b19cd88 100644
+--- a/projects/excalidraw/helpers.py
++++ b/projects/excalidraw/helpers.py
+@@ -27,3 +27,88 @@ def box(a, x0, y0, x1, y1, label):
+     a.key("Enter", after=400)
+     a.write(label, delay=90, after=400)
+     a.key("Escape", after=600)
++
++
++def panel(a):
++    """Properties panel on the left, shown while a shape is selected or a drawing tool is active."""
++    return a.pg.get_by_role("region", name="Selected shape actions")
++
++
++# ------------------------------------------------------------ dense demos
++# While the screencast records, every mouse event on the canvas renders and captures a frame:
++# 60-100 ms per step when the cursor only moves, about 350 ms per step while a shape is drawn.
++# Actor moves send about 50 steps per second (at least 12 per click or drag), so a demo with
++# many shapes records at twice its check estimate. These variants move the visible cursor in a
++# few steps instead. Repeated tools use their number key, the toolbar still highlights the tool.
++
++TOOL_KEYS = {"Rectangle": "2", "Diamond": "3", "Ellipse": "4", "Arrow": "5", "Line": "6", "Draw": "7", "Text": "8"}
++
++
++def glide(a, x, y, steps=3):
++    """Move the visible cursor to (x, y) in `steps` mouse events."""
++    a.move(x, y, dur=steps / 50)
++
++
++def tap(a, x, y, steps=2, after=300):
++    """Click a viewport point, like a.click_at() with fewer mouse steps."""
++    glide(a, x, y, steps)
++    a.wait(60)
++    a.pg.mouse.down(); a.wait(40); a.pg.mouse.up()
++    a.wait(after)
++
++
++def press(a, loc, steps=2, after=300):
++    """Click a locator, like a.click() with fewer mouse steps."""
++    tap(a, *a.point(loc), steps=steps, after=after)
++
++
++def pull(a, x0, y0, x1, y1, steps=3, after=150):
++    """Drag from (x0, y0) to (x1, y1), like a.drag() with fewer mouse steps. The cursor gets to
++    the start in 2 steps, the drag itself takes `steps`."""
++    glide(a, x0, y0, 2)
++    a.wait(60)
++    a.pg.mouse.down(); a.wait(40)
++    glide(a, x1, y1, steps)
++    a.wait(40)
++    a.pg.mouse.up()
++    a.wait(after)
++
++
++def pick(a, name, key=False, after=150):
++    """A tool with a visible click in the toolbar, or with its number key."""
++    if key:
++        a.key(TOOL_KEYS[name], after=after)
++    else:
++        press(a, tool_button(a, name), after=after)
++
++
++def shape(a, x0, y0, x1, y1, label, kind="Rectangle", key=True, delay=0):
++    """Draw a shape and type its label. Enter on a selected shape opens its text, Escape closes
++    it and keeps the shape selected. Under capture every key costs about 100 ms, so labels are
++    typed without a delay between keys by default."""
++    pick(a, kind, key=key)
++    pull(a, x0, y0, x1, y1)
++    a.key("Enter", after=150)
++    a.write(label, delay=delay, after=150)
++    a.key("Escape", after=120)
++
++
++def link(a, x0, y0, x1, y1, key=True):
++    """Draw an arrow and deselect it. Start and end a few pixels outside a shape's edge, so the
++    arrow binds to the shape."""
++    pick(a, "Arrow", key=key, after=100)
++    pull(a, x0, y0, x1, y1, steps=2, after=120)
++    a.key("Escape", after=120)
++
++
++def fill(a, color, after=400):
++    """Background of the selected shape, or of the next one while a tool is active. Quick picks
++    are buttons named by hex value, e.g. "#ffec99", or "transparent"."""
++    press(a, panel(a).get_by_role("button", name=color, exact=True), after=after)
++
++
++def fill_from_palette(a, test_id, after=400):
++    """Background from the full palette popup, e.g. "color-orange". Escape closes the popup."""
++    press(a, panel(a).get_by_role("button", name="Background", exact=True), after=300)
++    press(a, a.pg.get_by_test_id(test_id), after=after)
++    a.key("Escape", after=150)

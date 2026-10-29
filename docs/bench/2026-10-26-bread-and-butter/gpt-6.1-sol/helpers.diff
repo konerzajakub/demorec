@@ -1,0 +1,56 @@
+diff --git a/projects/excalidraw/helpers.py b/projects/excalidraw/helpers.py
+index 9f4d8b9..c3d2e6e 100644
+--- a/projects/excalidraw/helpers.py
++++ b/projects/excalidraw/helpers.py
+@@ -27,3 +27,51 @@ def box(a, x0, y0, x1, y1, label):
+     a.key("Enter", after=400)
+     a.write(label, delay=90, after=400)
+     a.key("Escape", after=600)
++
++
++def shape_actions(a):
++    """The properties panel in the inspected local build."""
++    return a.pg.get_by_role("region", name="Selected shape actions")
++
++
++def font_size(a, size):
++    """S/M/L/XL are the four unnamed radios in the inspected Font size group."""
++    index = {"S": 0, "M": 1, "L": 2, "XL": 3}[size]
++    a.click(shape_actions(a).get_by_role("group", name="Font size", exact=True)
++            .get_by_role("radio").nth(index), after=120)
++
++
++def labelled_shape(a, kind, bounds, label):
++    """Draw and label a canvas shape at a compact, readable demo pace."""
++    # Number shortcuts are printed below the tools in the inspected toolbar.
++    a.key({"Rectangle": "2", "Ellipse": "4"}[kind], after=120)
++    a.drag(*bounds, dur=0.45, after=150)
++    a.key("Enter", after=100)
++    a.write(label, delay=32, after=100)
++    a.key("Escape", after=150)
++
++
++def connector(a, endpoints):
++    """Draw an arrow between named viewport points; Excalidraw binds its ends."""
++    a.key("5", after=120)
++    a.drag(*endpoints, dur=0.45, after=150)
++    a.key("Escape", after=120)
++
++
++def shape_background(a, color):
++    a.click(shape_actions(a).get_by_role("button", name=color, exact=True), after=150)
++
++
++def canvas_overview(a, park_at, seconds=1.5):
++    """Clear selection and park the visible cursor away from the drawing."""
++    a.key("Escape", after=120)
++    a.move(*park_at)
++    reading_pause(a, seconds)
++
++
++def reading_pause(a, seconds):
++    """Keep reading pauses full length when a scene uses faster cursor travel.
++
++    Check mode retains its normal compressed holds and duration accounting.
++    """
++    a.hold(seconds / a.speed if a.speed > 0.1 else seconds)

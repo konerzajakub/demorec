@@ -1,0 +1,12 @@
+name = "excalidraw"
+
+[app]
+url = "https://excalidraw.com/"
+ready = "role=region[name='Shapes']"
+
+[browser]
+width = 1280
+height = 720
+locale = "en-US"
+timezone = "UTC"
+scroll = false                   # the page never scrolls, the mouse wheel pans the canvas

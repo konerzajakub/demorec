@@ -1,0 +1,10 @@
+out/
+__pycache__/
+*.egg-info/
+.venv/
+bench/prompt.txt
+.DS_Store
+.env
+.env.*
+auth.json
+.credentials.json

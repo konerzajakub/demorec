@@ -1,0 +1,57 @@
+{
+  "project": "excalidraw",
+  "demo": "bread-and-butter",
+  "mode": "record",
+  "status": "ok",
+  "started": "2026-10-28T18:07:58",
+  "chapters": [
+    {
+      "title": "Blank canvas",
+      "start": 1.52,
+      "keyframe": "keyframes/01-blank-canvas.jpg"
+    },
+    {
+      "title": "Title",
+      "start": 2.97,
+      "keyframe": "keyframes/02-title.jpg"
+    },
+    {
+      "title": "Ingredients",
+      "start": 8.1,
+      "keyframe": "keyframes/03-ingredients.jpg"
+    },
+    {
+      "title": "Steps",
+      "start": 17.38,
+      "keyframe": "keyframes/04-steps.jpg"
+    },
+    {
+      "title": "What goes where",
+      "start": 26.36,
+      "keyframe": "keyframes/05-what-goes-where.jpg"
+    },
+    {
+      "title": "Colors",
+      "start": 32.33,
+      "keyframe": "keyframes/06-colors.jpg"
+    },
+    {
+      "title": "Tip",
+      "start": 37.21,
+      "keyframe": "keyframes/07-tip.jpg"
+    },
+    {
+      "title": "Done",
+      "start": 44.06,
+      "keyframe": "keyframes/08-done.jpg"
+    }
+  ],
+  "missing_moments": [],
+  "unplanned_chapters": [],
+  "video": "bread-and-butter.mp4",
+  "duration_s": 51.82,
+  "chapters_vtt": "chapters.vtt",
+  "contact_sheet": "contact.jpg (one frame every 3 s, left to right, top to bottom)",
+  "run_s": 80.2,
+  "model": "claude-opus-5-5"
+}
