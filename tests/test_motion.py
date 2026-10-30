@@ -59,6 +59,28 @@ def test_spring_is_quicker_than_ease_in_out_then_lands_softly():
     assert ease("spring", 0.3) > ease("ease-in-out", 0.3)
 
 
+def test_spring_soft_is_monotonic_from_0_to_1():
+    v = [ease("spring-soft", i / 1000) for i in range(1001)]
+    assert v[0] == 0 and v[-1] == 1
+    assert all(b >= a for a, b in zip(v, v[1:]))
+    assert max(v) <= 1
+
+
+def test_spring_soft_has_zero_speed_at_both_ends():
+    f, h = curve("spring-soft"), 1e-3
+    assert f(h) / h < 0.01  # 1 = the average speed of the whole move
+    assert (1 - f(1 - h)) / h < 0.01
+    assert ((1 - curve("spring")(1 - h)) / h) > 0.05  # the plain spring still moves there
+
+
+def test_spring_soft_starts_gentler_and_lands_like_the_spring():
+    soft, spring = curve("spring-soft"), curve("spring")
+    assert soft(0.05) < spring(0.05) / 2  # no jump on the first frames
+    assert soft(0.5) > 0.6  # most of the way at half time, like the spring
+    speed = [(soft((i + 1) / 100) - soft(i / 100)) * 100 for i in range(100)]
+    assert 0.12 < speed.index(max(speed)) / 100 < 0.3  # the peak comes a little later than the spring's
+
+
 def test_unknown_easing_fails_with_the_names():
     with pytest.raises(ValueError, match="spring"):
         curve("springy")

@@ -112,6 +112,8 @@ tell you to change them for one move or for the whole project:
 - Easings (`src/demorec/motion.py`, compared in `docs/media/motion/`):
   - `spring`: critically damped spring, Apple's default: quick start, long soft landing, no
     overshoot. Default for zooms.
+  - `spring-soft`: spring with a gentle start: no jump on the first frame, same long soft
+    landing.
   - `snappy`: spring with a small overshoot.
   - `bouncy`: spring with a visible overshoot, playful.
   - `human`: minimum-jerk curve of a hand reaching for a target, symmetric. Default for the cursor.

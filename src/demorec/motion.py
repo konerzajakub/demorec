@@ -24,6 +24,39 @@ def _spring(bounce):
     return lambda u: x(u) + rest * u * u * (3 - 2 * u)
 
 
+def _smoothstep(x):
+    x = min(max(x, 0.0), 1.0)
+    return x * x * (3 - 2 * x)
+
+
+def _spring_soft(ramp=0.2, land=0.15, n=2000):
+    """The critically damped spring with a gentle start. Its speed is multiplied by a smooth
+    ramp over the first `ramp` of the duration, so the move builds up instead of jumping on the
+    first frame, and by a smooth fade over the last `land`, which takes the spring's leftover
+    end speed down to 0. The speed profile is integrated and rescaled to end at exactly 1: zero
+    speed at both ends, the long soft landing stays."""
+    w = 2 * math.pi
+    rest = (1 + w) * math.exp(-w)  # what _spring(0) blends in so it lands exactly
+
+    def speed(u):  # derivative of _spring(0.0)
+        return w * w * u * math.exp(-w * u) + rest * 6 * u * (1 - u)
+
+    v = [speed(i / n) * _smoothstep(i / n / ramp) * _smoothstep((1 - i / n) / land) for i in range(n + 1)]
+    acc = [0.0]
+    for i in range(n):
+        acc.append(acc[-1] + (v[i] + v[i + 1]) / 2)
+    acc = [p / acc[-1] for p in acc]
+
+    def f(u):
+        if u <= 0:
+            return 0.0
+        if u >= 1:
+            return 1.0
+        k = min(int(u * n), n - 1)
+        return acc[k] + (acc[k + 1] - acc[k]) * (u * n - k)
+    return f
+
+
 def _bezier(x1, y1, x2, y2):
     """CSS cubic-bezier(x1, y1, x2, y2): solve x(s) = u for s, return y(s)."""
     def coord(s, a, b):
@@ -56,6 +89,7 @@ def _in_out(p):
 # name: (curve, one line for AGENTS.md and README)
 EASINGS = {
     "spring": (_spring(0.0), "critically damped spring, Apple's default (bounce 0): quick start, long soft landing, no overshoot"),
+    "spring-soft": (_spring_soft(), "spring with a gentle start: no jump on the first frame, same long soft landing"),
     "snappy": (_spring(0.2), "spring with a small overshoot (bounce 0.2), lively but calm"),
     "bouncy": (_spring(0.3), "spring with a visible overshoot (bounce 0.3), playful"),
     "human": (lambda u: u * u * u * (10 + u * (6 * u - 15)), "minimum-jerk curve of a human hand reaching for a target (Flash and Hogan 1985), symmetric"),
