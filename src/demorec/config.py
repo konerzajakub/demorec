@@ -42,7 +42,7 @@ class Config:
                                   # magnified by the browser, sharp at any zoom (see camera.py)
     zoom_easing: str = "spring"   # [motion] easing of zoom and zoom_out, names in motion.py
     zoom_duration: float = 1.0    # [motion] s, default dur of zoom and zoom_out
-    cursor_easing: str = "human"  # [motion] easing of the cursor
+    cursor_easing: str = "ease-in-out"  # [motion] easing of the cursor
     cursor_speed: float = 1.0     # [motion] 2 = cursor moves take half as long
     cursor_curve: float = 0.05    # [motion] the cursor path bows by this fraction of its length, 0 = straight
     scroll_easing: str = SCROLL_DEFAULT  # [motion] easing of wheel scrolls and center()

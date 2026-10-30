@@ -2,6 +2,7 @@
 
     .venv/bin/python docs/media/motion/make_gifs.py            # record and build
     .venv/bin/python docs/media/motion/make_gifs.py --no-record  # build from the last recordings
+    .venv/bin/python docs/media/motion/make_gifs.py --only cursor-easing  # one GIF
 
 Each GIF shows one kind of motion with several easings side by side, the default first.
 The scratch demos (projects/example/demos/_motion-*) are recorded at full resolution
@@ -20,7 +21,7 @@ TW, TH, COLS = 640, 360, 2   # tile size, tiles per row: 1280 px wide
 TAIL = 2.5  # s the recorder holds after the scene
 
 ZOOMS = ["spring", "spring-soft", "snappy", "bouncy", "ease-in-out", "linear"]
-CURSORS = ["human", "ease-in-out", "cubic", "smoothstep", "spring", "linear"]
+CURSORS = ["ease-in-out", "human", "cubic", "smoothstep", "spring", "linear"]
 
 HEAD = '"""Scratch demo for docs/media/motion/make_gifs.py."""\nfrom helpers import *\n\nOUTPUT = "{demo}.mp4"\nE = "{easing}"\n'
 SCENES = {
@@ -87,22 +88,25 @@ def scene(a):
 }
 # name: scene, easings, the default easing for this kind of motion
 GIFS = {"zoom-easing": ("zoom", ZOOMS, "spring"), "pan-easing": ("pan", ZOOMS, "spring"),
-        "cursor-easing": ("cursor", CURSORS, "human")}
+        "cursor-easing": ("cursor", CURSORS, "ease-in-out")}
 
 
 def demo_id(kind, easing):
     return "_motion-%s-%s" % (kind, easing)
 
 
-def takes():
-    yield demo_id("opening", "spring"), "opening", "spring"
-    for kind, easings, _ in GIFS.values():
-        for e in easings:
-            yield demo_id(kind, e), kind, e
+def takes(only=None):
+    """(demo id, scene, easing) of every recording, of the GIFs in only if given."""
+    if not only or "opening-zoom-out" in only:
+        yield demo_id("opening", "spring"), "opening", "spring"
+    for name, (kind, easings, _) in GIFS.items():
+        if not only or name in only:
+            for e in easings:
+                yield demo_id(kind, e), kind, e
 
 
-def record(log):
-    for demo, kind, easing in takes():
+def record(log, only):
+    for demo, kind, easing in takes(only):
         d = os.path.join(PROJECT, "demos", demo)
         os.makedirs(d, exist_ok=True)
         with open(os.path.join(d, "scene.py"), "w", encoding="utf-8") as f:
@@ -179,8 +183,8 @@ def opening():
         "[0:v]fps=%d,scale=1280:720:flags=lanczos[g]" % FPS, os.path.join(DST, "opening-zoom-out.gif"))
 
 
-def clean():
-    for demo, _, _ in takes():
+def clean(only):
+    for demo, _, _ in takes(only):
         for d in (os.path.join(PROJECT, "demos", demo), os.path.join(PROJECT, "out", demo)):
             shutil.rmtree(d, ignore_errors=True)
 
@@ -189,17 +193,20 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--no-record", action="store_true", help="build from the recordings of the last --keep run")
     ap.add_argument("--keep", action="store_true", help="keep the scratch demos and their recordings")
+    ap.add_argument("--only", nargs="+", choices=["opening-zoom-out", *GIFS], help="build only these GIFs")
     a = ap.parse_args()
     with tempfile.TemporaryDirectory() as tmp:
         if not a.no_record:
             with open(os.path.join(tmp, "record.log"), "w", encoding="utf-8") as log:
-                record(log)
+                record(log, a.only)
         label_y = labels(tmp)
-        opening()
+        if not a.only or "opening-zoom-out" in a.only:
+            opening()
         for name, (kind, easings, _) in GIFS.items():
-            grid(name, kind, easings, tmp, label_y)
+            if not a.only or name in a.only:
+                grid(name, kind, easings, tmp, label_y)
     if not a.keep:
-        clean()
+        clean(a.only)
 
 
 if __name__ == "__main__":

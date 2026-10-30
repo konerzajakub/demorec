@@ -100,7 +100,7 @@ EASINGS = {
     "smoothstep": (lambda u: u * u * (3 - 2 * u), "the curve demorec used before, mild ease-in-out"),
     "linear": (lambda u: u, "constant speed, abrupt start and stop, for comparison"),
 }
-ZOOM_DEFAULT, CURSOR_DEFAULT, SCROLL_DEFAULT = "spring", "human", "ease-in-out"
+ZOOM_DEFAULT, CURSOR_DEFAULT, SCROLL_DEFAULT = "spring", "ease-in-out", "ease-in-out"
 # Average scroll speed in CSS px/s. ease-in-out peaks at 1.7x the average, about 850 px/s: some
 # 1.3 viewport heights per second at 640 px, slow enough that a room watching a projector can
 # follow the page. The wheel steps demorec sent before ran at about 2500 px/s.

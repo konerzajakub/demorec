@@ -98,7 +98,7 @@ def test_motion_table_in_project_toml(tmp_path):
     (tmp_path / "project.toml").write_text('[app]\nurl = "http://x/"\n[motion]\nzoom_easing = "quint"\n'
                                            'cursor_speed = 2\n[recording]\ncrop_zoom = 2\n', encoding="utf-8")
     cfg = config.load(tmp_path)
-    assert (cfg.zoom_easing, cfg.cursor_easing, cfg.cursor_speed, cfg.crop_zoom) == ("quint", "human", 2, 2)
+    assert (cfg.zoom_easing, cfg.cursor_easing, cfg.cursor_speed, cfg.crop_zoom) == ("quint", "ease-in-out", 2, 2)
     (tmp_path / "project.toml").write_text('[app]\nurl = "http://x/"\n[motion]\ncursor_easing = "wobbly"\n',
                                            encoding="utf-8")
     with pytest.raises(SystemExit, match="cursor_easing"):

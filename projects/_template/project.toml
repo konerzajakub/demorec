@@ -28,7 +28,7 @@ before = ""                      # shell command run in this folder before every
 [motion]                         # easings: spring spring-soft snappy bouncy human ease-in-out cubic quint material smoothstep linear
 zoom_easing = "spring"           # zoom, zoom_out and the camera's pans
 zoom_duration = 1.0              # s
-cursor_easing = "human"
+cursor_easing = "ease-in-out"
 cursor_speed = 1.0               # 2 = cursor moves take half as long
 cursor_curve = 0.05              # the cursor path bows by this fraction of its length, 0 = straight
 scroll_easing = "ease-in-out"    # wheel scrolls and a.center()

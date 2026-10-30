@@ -102,8 +102,8 @@ Zooms, pans and cursor moves accelerate and decelerate. The defaults are set, th
 tell you to change them for one move or for the whole project:
 
 - `[motion]` in `project.toml`: `zoom_easing = "spring"`, `zoom_duration = 1.0` (s),
-  `cursor_easing = "human"`, `cursor_speed = 1.0` (2 = twice as fast), `cursor_curve = 0.05`
-  (how much the cursor path bows, 0 = straight).
+  `cursor_easing = "ease-in-out"`, `cursor_speed = 1.0` (2 = twice as fast),
+  `cursor_curve = 0.05` (how much the cursor path bows, 0 = straight).
 - Scrolling glides: `scroll_easing = "ease-in-out"`, `scroll_speed = 500` (average px/s, peak
   about 850, calm enough for a projector). Per call: `a.wheel(dy, dur=..., easing=...)`,
   `a.scroll_by(dy, dur=...)`, `a.center(loc, dur=...)`.
@@ -116,8 +116,8 @@ tell you to change them for one move or for the whole project:
     landing.
   - `snappy`: spring with a small overshoot.
   - `bouncy`: spring with a visible overshoot, playful.
-  - `human`: minimum-jerk curve of a hand reaching for a target, symmetric. Default for the cursor.
-  - `ease-in-out`: CSS ease-in-out, gentle.
+  - `human`: minimum-jerk curve of a hand reaching for a target, symmetric.
+  - `ease-in-out`: CSS ease-in-out, gentle. Default for the cursor and for scrolling.
   - `cubic`: slow ends, fast middle.
   - `quint`: very slow ends, fast middle, cinematic.
   - `material`: Material 3 standard, fast start, long deceleration.

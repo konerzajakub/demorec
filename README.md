@@ -50,7 +50,7 @@ Scripted demo videos of web applications.
 - A demo can open on a small element, here the title zoomed about 10x, and zoom out to the app.
 - Zooms and pans use a critically damped spring by default, Apple's default animation: a quick
   start and a long soft landing.
-- The cursor follows a minimum-jerk curve, like a hand reaching for a target, on a slightly bent path.
+- The cursor eases in and out (CSS ease-in-out) on a slightly bent path.
 - The wheel scrolls at a calm, eased pace, about 500 px/s on average.
 - Change all of these in `[motion]` in `project.toml` or per call, `AGENTS.md` lists the options.
 - One kind of move per GIF, each tile with another easing, the default top left.
@@ -66,7 +66,7 @@ Pan while zoomed in:
 
 Cursor:
 
-![Cursor moves with human, ease-in-out, cubic, smoothstep, spring and linear easing](docs/media/motion/cursor-easing.gif)
+![Cursor moves with ease-in-out, human, cubic, smoothstep, spring and linear easing](docs/media/motion/cursor-easing.gif)
 
 ## Install
 
