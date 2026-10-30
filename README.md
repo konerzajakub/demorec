@@ -51,7 +51,8 @@ Scripted demo videos of web applications.
 - Zooms and pans use a critically damped spring by default, Apple's default animation: a quick
   start and a long soft landing.
 - The cursor follows a minimum-jerk curve, like a hand reaching for a target, on a slightly bent path.
-- Change both in `[motion]` in `project.toml` or per call, `AGENTS.md` lists the options.
+- The wheel scrolls at a calm, eased pace, about 500 px/s on average.
+- Change all of these in `[motion]` in `project.toml` or per call, `AGENTS.md` lists the options.
 - The same moves with each easing, the default top left:
 
 ![spring, snappy, bouncy and human easing](docs/media/motion/easing-springs.gif)

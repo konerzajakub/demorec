@@ -1,9 +1,9 @@
-"""Easing curves for the camera and the cursor: how a move speeds up and slows down.
+"""Easing curves for the camera, the cursor and scrolling: how a move speeds up and slows down.
 
 Every curve maps the time fraction u (0 to 1) of a move to the fraction of the distance covered,
 0 at the start and exactly 1 at the end. Springs may pass 1 on the way (overshoot). The names are
-what `[motion]` in project.toml and the `easing=` argument of `zoom`, `zoom_out`, `move`, `hover`
-and `click` accept."""
+what `[motion]` in project.toml and the `easing=` argument of `zoom`, `zoom_out`, `move`, `hover`,
+`click`, `wheel`, `scroll_by` and `center` accept."""
 import math
 
 
@@ -66,7 +66,13 @@ EASINGS = {
     "smoothstep": (lambda u: u * u * (3 - 2 * u), "the curve demorec used before, mild ease-in-out"),
     "linear": (lambda u: u, "constant speed, abrupt start and stop, for comparison"),
 }
-ZOOM_DEFAULT, CURSOR_DEFAULT = "spring", "human"
+ZOOM_DEFAULT, CURSOR_DEFAULT, SCROLL_DEFAULT = "spring", "human", "ease-in-out"
+# Average scroll speed in CSS px/s. ease-in-out peaks at 1.7x the average, about 850 px/s: some
+# 1.3 viewport heights per second at 640 px, slow enough that a room watching a projector can
+# follow the page. The wheel steps demorec sent before ran at about 2500 px/s.
+SCROLL_SPEED = 500.0
+SCROLL_MIN_DUR = 0.3  # s, so a short scroll is still seen to move
+SCROLL_RATE = 60      # wheel events per second, one per display frame
 
 
 def curve(name):
@@ -92,3 +98,22 @@ def arc(x0, y0, x1, y1, e, u, bend):
     dx, dy = x1 - x0, y1 - y0
     side = bend * math.sin(math.pi * min(max(u, 0.0), 1.0))
     return x0 + dx * e - dy * side, y0 + dy * e + dx * side
+
+
+def scroll_duration(dist, speed=SCROLL_SPEED):
+    """Seconds a scroll of dist px takes at an average speed in px/s, at least SCROLL_MIN_DUR."""
+    return max(SCROLL_MIN_DUR, abs(dist) / speed)
+
+
+def scroll_steps(dist, dur, easing, rate=SCROLL_RATE):
+    """A scroll of dist px over dur s as wheel steps [(t, px)]: one every 1/rate s, each the eased
+    distance covered since the last one, small at the ends and large in the middle. The steps are
+    whole px and add up to dist exactly. Ticks where nothing is left to move are dropped."""
+    n = max(1, round(dur * rate))
+    steps, done = [], 0
+    for k in range(1, n + 1):
+        to = round(dist * ease(easing, k / n))
+        if to != done:
+            steps.append((dur * k / n, to - done))
+            done = to
+    return steps

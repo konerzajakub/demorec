@@ -1,14 +1,33 @@
 """Actor: drives the page the way a person would, so the recording is easy to follow.
 
-The mouse travels along an eased, slightly curved path, the wheel scrolls in small steps, and
-text is typed key by key. Every method takes Playwright locators. Pauses (`hold`) are part of the
-video. Easings and durations come from [motion] in project.toml (see motion.py)."""
+The mouse travels along an eased, slightly curved path, the wheel scrolls at a calm, eased pace,
+and text is typed key by key. Every method takes Playwright locators. Pauses (`hold`) are part of
+the video. Easings and durations come from [motion] in project.toml (see motion.py)."""
 import math, os, time
 from pathlib import Path
 
 from .camera import SWITCH_HOLD, Camera, fit, follow
-from .motion import arc, curve, ease
+from .motion import arc, curve, ease, scroll_duration, scroll_steps
 from .util import log, slug
+
+# The nearest ancestor of e that scrolls vertically (else the page), kept as window.__demorecScroller.
+# Returns how far it must scroll so e sits at block: start, center, end or nearest.
+SCROLLER_JS = """(e, block) => {
+  let s = e.parentElement;
+  for (; s && s !== document.body && s !== document.documentElement; s = s.parentElement) {
+    const o = getComputedStyle(s).overflowY;
+    if (/auto|scroll|overlay/.test(o) && s.scrollHeight > s.clientHeight + 1) break;
+  }
+  const page = !s || s === document.body || s === document.documentElement;
+  if (page) s = document.scrollingElement;
+  const r = e.getBoundingClientRect();
+  const top = page ? 0 : s.getBoundingClientRect().top + s.clientTop, h = page ? innerHeight : s.clientHeight;
+  const d = block === 'start' ? r.top - top : block === 'end' ? r.bottom - top - h
+    : block === 'nearest' ? (r.top < top ? r.top - top : r.bottom > top + h ? Math.min(r.bottom - top - h, r.top - top) : 0)
+    : r.top + r.height / 2 - top - h / 2;
+  window.__demorecScroller = s;
+  return Math.max(-s.scrollTop, Math.min(s.scrollHeight - s.clientHeight - s.scrollTop, d));
+}"""
 
 # True if e or one of its ancestors is position fixed or sticky.
 FIXED_JS = """e => { for (let n = e; n && n.nodeType === 1; n = n.parentElement) {
@@ -248,13 +267,33 @@ class Actor:
         self._show(self.camera.at(end))
 
     # ------------------------------------------------------------ scrolling
-    def wheel(self, dy):
-        """Scroll by dy pixels in wheel steps of 40 at the cursor."""
+    def wheel(self, dy, dur=None, easing=None):
+        """Scroll by dy pixels with the mouse wheel at the cursor. Real wheel events, 60 per
+        second, small at the start and the end: the page glides. dur in seconds, by default dy
+        over [motion] scroll_speed. easing: a name from motion.py, default [motion] scroll_easing."""
         # A focused number input would change its value on wheel instead of scrolling the page.
         self.pg.evaluate("() => { const e = document.activeElement; if (e && e.tagName === 'INPUT' && e.type === 'number') e.blur(); }")
-        for _ in range(max(1, int(abs(dy) / 40))):
-            self.pg.mouse.wheel(0, 40 if dy > 0 else -40)
-            self.wait(16)
+        self._glide(dy, dur, easing, lambda step: self.pg.mouse.wheel(0, step))
+
+    def _glide(self, dist, dur, easing, send):
+        """Call send(px) with the eased steps of a dist px scroll, paced by the clock."""
+        dist = round(dist)
+        if not dist:
+            return
+        easing = easing or self.cfg.scroll_easing
+        curve(easing)  # unknown names fail before anything moves
+        if dur is None:
+            dur = scroll_duration(dist, self.cfg.scroll_speed)
+        self.saved += dur * (1 - self.speed)
+        dur *= self.speed
+        t_start = time.time()
+        for t, step in scroll_steps(dist, dur, easing):
+            left = t_start + t - time.time()
+            if left > 0:
+                self.pg.wait_for_timeout(int(left * 1000))
+            send(step)
+            if self._rendering():
+                self._tick()
 
     def visible(self, loc, at=None, land=0.35):
         """Scroll with the wheel until loc is fully in view. If it has to scroll, loc lands at
@@ -277,7 +316,7 @@ class Actor:
                 break  # close enough to `land`
             y = bb["y"]
             delta = y - self.h * land
-            step = max(40, min(240, abs(delta)))
+            step = max(40, min(2 * self.h, abs(delta)))  # one glide, the loop corrects what it missed
             self.wheel(step if delta > 0 else -step)
             self.wait(120)
             if self._stuck(loc, y):
@@ -307,16 +346,21 @@ class Actor:
         self.wait(250)
         return abs(now() - y) < 1
 
-    def center(self, loc, block="center"):
-        """Scroll loc into view with a script, for containers the wheel does not move."""
-        loc.first.evaluate("(e, b) => e.scrollIntoView({block: b, behavior: 'smooth'})", block)
-        self.wait(900)
+    def center(self, loc, block="center", dur=None, easing=None):
+        """Scroll loc into view with a script, for containers the wheel does not move. Its nearest
+        scrolling container glides like wheel(), outer ones follow with scrollIntoView."""
+        loc = loc.first
+        dist = loc.evaluate(SCROLLER_JS, block)
+        self._glide(dist, dur, easing, lambda step: self.pg.evaluate(
+            "d => window.__demorecScroller.scrollBy({top: d, behavior: 'instant'})", step))
+        loc.evaluate("(e, b) => e.scrollIntoView({block: b, behavior: 'smooth'})", block)
+        self.wait(400)
 
-    def scroll_by(self, dy, at=None):
+    def scroll_by(self, dy, at=None, dur=None, easing=None):
         """Wheel-scroll dy pixels, with the cursor at `at` (x, y) if given."""
         if at:
             self.move(*at)
-        self.wheel(dy)
+        self.wheel(dy, dur, easing)
         self.wait(400)
 
     # ------------------------------------------------------------ keyboard and forms
@@ -413,8 +457,7 @@ class Actor:
         tab.wait_for_timeout(2500)
         tab.mouse.move(self.w / 2, self.h / 2)
         for _ in range(scroll_steps):
-            for _ in range(6):
-                tab.mouse.wheel(0, 40); tab.wait_for_timeout(16)
+            self._glide(240, None, None, lambda step: tab.mouse.wheel(0, step))
             tab.wait_for_timeout(500)
         tab.wait_for_timeout(int(hold * 1000))
         app.bring_to_front()

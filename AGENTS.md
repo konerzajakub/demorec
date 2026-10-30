@@ -104,6 +104,9 @@ tell you to change them for one move or for the whole project:
 - `[motion]` in `project.toml`: `zoom_easing = "spring"`, `zoom_duration = 1.0` (s),
   `cursor_easing = "human"`, `cursor_speed = 1.0` (2 = twice as fast), `cursor_curve = 0.05`
   (how much the cursor path bows, 0 = straight).
+- Scrolling glides: `scroll_easing = "ease-in-out"`, `scroll_speed = 500` (average px/s, peak
+  about 850, calm enough for a projector). Per call: `a.wheel(dy, dur=..., easing=...)`,
+  `a.scroll_by(dy, dur=...)`, `a.center(loc, dur=...)`.
 - One call: `a.zoom(loc, dur=1.5, easing="quint")`, `a.zoom_out(easing=...)`,
   `a.move(x, y, easing=...)`, `a.hover(loc, easing=...)`, `a.click(loc, easing=...)`.
 - Easings (`src/demorec/motion.py`, compared in `docs/media/motion/`):

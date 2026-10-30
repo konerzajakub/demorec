@@ -3,7 +3,7 @@ import os, tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .motion import curve
+from .motion import SCROLL_DEFAULT, SCROLL_SPEED, curve
 
 
 @dataclass
@@ -45,6 +45,8 @@ class Config:
     cursor_easing: str = "human"  # [motion] easing of the cursor
     cursor_speed: float = 1.0     # [motion] 2 = cursor moves take half as long
     cursor_curve: float = 0.05    # [motion] the cursor path bows by this fraction of its length, 0 = straight
+    scroll_easing: str = SCROLL_DEFAULT  # [motion] easing of wheel scrolls and center()
+    scroll_speed: float = SCROLL_SPEED   # [motion] average px/s of a scroll, why 500 see motion.py
     before: str = ""              # shell command run before every recording (reset demo data)
     login: Login | None = None
     out_dir: str = ""
@@ -57,7 +59,8 @@ TABLE_FIELDS = {
     "app": ("ready",),
     "browser": ("width", "height", "locale", "timezone", "channel", "safe_top", "safe_bottom", "fixed_header", "scroll"),
     "recording": ("fps", "crf", "scale", "video_scale", "max_zoom", "crop_zoom", "before"),
-    "motion": ("zoom_easing", "zoom_duration", "cursor_easing", "cursor_speed", "cursor_curve"),
+    "motion": ("zoom_easing", "zoom_duration", "cursor_easing", "cursor_speed", "cursor_curve",
+               "scroll_easing", "scroll_speed"),
 }
 
 
@@ -74,11 +77,13 @@ def load(project_dir, out_root=None):
         raise SystemExit("%s: [app] url is required" % path)
     settings = {key: d[table][key] for table, keys in TABLE_FIELDS.items()
                 for key in keys if key in d.get(table, {})}
-    for key in ("zoom_easing", "cursor_easing"):
+    for key in ("zoom_easing", "cursor_easing", "scroll_easing"):
         try:
             curve(settings.get(key, "spring"))
         except ValueError as ex:  # a typo fails here, with the known names
             raise SystemExit("%s: [motion] %s: %s" % (path, key, ex))
+    if settings.get("scroll_speed", 1) <= 0:
+        raise SystemExit("%s: [motion] scroll_speed must be above 0 (px/s)" % path)
     out = out_root or os.path.join(project_dir, "out")
     return Config(project_dir=project_dir, name=d.get("name") or os.path.basename(project_dir),
                   url=app_url(project_dir, app["url"]), login=read_login(d), out_dir=out,

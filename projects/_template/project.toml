@@ -31,6 +31,8 @@ zoom_duration = 1.0              # s
 cursor_easing = "human"
 cursor_speed = 1.0               # 2 = cursor moves take half as long
 cursor_curve = 0.05              # the cursor path bows by this fraction of its length, 0 = straight
+scroll_easing = "ease-in-out"    # wheel scrolls and a.center()
+scroll_speed = 500               # average px/s of a scroll, the peak is about 1.7x
 
 # Login form, filled before every run. Uncomment if the app needs a login. For other login
 # flows define login(a) in helpers.py instead. Values here are the Keycloak defaults.
