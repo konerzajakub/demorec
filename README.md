@@ -48,8 +48,10 @@ Scripted demo videos of web applications.
 ![The video opens with the app title filling the frame and zooms out to the whole app](docs/media/motion/opening-zoom-out.gif)
 
 - A demo can open on a small element, here the title zoomed about 10x, and zoom out to the app.
-- Zooms and pans use a critically damped spring by default, Apple's default animation: a quick
-  start and a long soft landing.
+- Zooms use a critically damped spring by default, Apple's default animation: a quick start and
+  a long soft landing.
+- Camera pans have their own, softer easing (`ease-in-out-soft`) and duration: a gentle start and
+  a long landing without a snap, the camera may glide on a little after the cursor has arrived.
 - The cursor eases in and out (CSS ease-in-out) on a slightly bent path.
 - The wheel scrolls at a calm, eased pace, about 500 px/s on average.
 - Change all of these in `[motion]` in `project.toml` or per call, `AGENTS.md` lists the options.
@@ -62,7 +64,7 @@ Zoom in and out:
 
 Pan while zoomed in:
 
-![Camera pan with spring, spring-soft, snappy, bouncy, ease-in-out and linear easing](docs/media/motion/pan-easing.gif)
+![Camera pan with ease-in-out-soft, ease-in-out, spring-soft, spring, cubic and linear easing](docs/media/motion/pan-easing.gif)
 
 Cursor:
 

@@ -21,6 +21,7 @@ TW, TH, COLS = 640, 360, 2   # tile size, tiles per row: 1280 px wide
 TAIL = 2.5  # s the recorder holds after the scene
 
 ZOOMS = ["spring", "spring-soft", "snappy", "bouncy", "ease-in-out", "linear"]
+PANS = ["ease-in-out-soft", "ease-in-out", "spring-soft", "spring", "cubic", "linear"]
 CURSORS = ["ease-in-out", "human", "cubic", "smoothstep", "spring", "linear"]
 
 HEAD = '"""Scratch demo for docs/media/motion/make_gifs.py."""\nfrom helpers import *\n\nOUTPUT = "{demo}.mp4"\nE = "{easing}"\n'
@@ -39,7 +40,7 @@ def scene(a):
     a.zoom_out(easing=E)
     a.hold(0.9)
 """,
-    # Zoomed in 2.5x, the camera pans along the table header and back.
+    # Zoomed in 2.5x, the camera pans along the table and back, with the pan duration of [motion].
     "pan": """
 def setup(a):
     a.mx, a.my = 640, 700
@@ -87,7 +88,7 @@ def scene(a):
 """,
 }
 # name: scene, easings, the default easing for this kind of motion
-GIFS = {"zoom-easing": ("zoom", ZOOMS, "spring"), "pan-easing": ("pan", ZOOMS, "spring"),
+GIFS = {"zoom-easing": ("zoom", ZOOMS, "spring"), "pan-easing": ("pan", PANS, "ease-in-out-soft"),
         "cursor-easing": ("cursor", CURSORS, "ease-in-out")}
 
 

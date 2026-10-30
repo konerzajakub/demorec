@@ -7,7 +7,7 @@ import math, os, time
 from pathlib import Path
 
 from .camera import SWITCH_HOLD, Camera, fit, follow
-from .motion import arc, curve, ease, scroll_duration, scroll_steps
+from .motion import arc, curve, ease, pan_duration, scroll_duration, scroll_steps
 from .util import log, slug
 
 # The nearest ancestor of e that scrolls vertically (else the page), kept as window.__demorecScroller.
@@ -108,7 +108,7 @@ class Actor:
         curve(easing)  # unknown names fail before anything moves
         self.saved += dur * (1 - self.speed)
         dur *= self.speed
-        self._follow(x, y, dur, easing)
+        self._follow(x, y, dur)
         n = max(2, int(dur * 60))
         t_start = time.time()
         for k in range(1, n + 1):
@@ -176,7 +176,9 @@ class Actor:
         The camera glides there in dur seconds ([motion] zoom_duration) with easing ([motion]
         zoom_easing) and stays until the next zoom() or zoom_out(). Zooms up to crop_zoom crop
         the video, larger ones make the browser render the view magnified, sharp at any zoom.
-        The page layout stays as it is. Called in setup(a), the video opens zoomed in."""
+        The page layout stays as it is. Called in setup(a), the video opens zoomed in.
+        Zoomed in, a target at the same scale is a pan: dur and easing then default to
+        [motion] pan_duration (growing a little with the distance) and pan_easing."""
         if not isinstance(target, (tuple, list)):
             bb = self.box(target)
             target = (bb["x"], bb["y"], bb["width"], bb["height"])
@@ -195,7 +197,16 @@ class Actor:
     def _rendering(self):
         return self._cdp is not None and self.camera.rendering()
 
+    def _pan(self, aim, to):
+        """Default duration of a camera pan from view aim to view to."""
+        return pan_duration(math.hypot(to[0] - aim[0], to[1] - aim[1]), aim[2], self.cfg.pan_duration)
+
     def _camera(self, view, dur, easing):
+        cam = self.camera
+        aim = cam.moves[-1][3] if cam.moves else cam.full  # where the camera is or is heading
+        if aim != cam.full and view != aim and abs(cam.zoom(view) - cam.zoom(aim)) < 1e-6:
+            dur = self._pan(aim, view) if dur is None else dur  # same zoom: a pan
+            easing = easing or self.cfg.pan_easing
         dur = self.cfg.zoom_duration if dur is None else dur
         easing = easing or self.cfg.zoom_easing
         curve(easing)
@@ -223,15 +234,15 @@ class Actor:
         elif rolling:
             self.hold(dur)  # the scene waits, so the viewer sees the camera move
 
-    def _follow(self, x, y, dur, easing):
+    def _follow(self, x, y, dur):
         """Zoomed in, the camera pans along with a cursor that would leave the picture."""
         if not self.camera.moves or not self._rolling():
             return
         aim = self.camera.moves[-1][3]  # where the camera is or is heading
         if aim != self.camera.full:
             to = follow(aim, x, y, self.w, self.h)
-            if to != aim:
-                self.camera.move(self._now(), to, max(dur, 0.3), easing)
+            if to != aim:  # the camera may glide on a little after the cursor has arrived
+                self.camera.move(self._now(), to, max(dur, self._pan(aim, to)), self.cfg.pan_easing)
 
     def _show(self, view):
         """Render mode: the browser draws view (CSS px of the viewport) magnified to the whole

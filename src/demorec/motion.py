@@ -94,6 +94,7 @@ EASINGS = {
     "bouncy": (_spring(0.3), "spring with a visible overshoot (bounce 0.3), playful"),
     "human": (lambda u: u * u * u * (10 + u * (6 * u - 15)), "minimum-jerk curve of a human hand reaching for a target (Flash and Hogan 1985), symmetric"),
     "ease-in-out": (_bezier(0.42, 0, 0.58, 1), "CSS ease-in-out, cubic-bezier(.42, 0, .58, 1), gentle"),
+    "ease-in-out-soft": (_bezier(0.45, 0, 0.25, 1), "cubic-bezier(.45, 0, .25, 1): gentle start like ease-in-out, then a long soft landing without a snap into place"),
     "cubic": (_in_out(3), "easeInOutCubic, slow ends and a fast middle"),
     "quint": (_in_out(5), "easeInOutQuint, very slow ends and a fast middle, cinematic"),
     "material": (_bezier(0.2, 0, 0, 1), "Material 3 standard, cubic-bezier(.2, 0, 0, 1): fast start, long deceleration"),
@@ -101,12 +102,21 @@ EASINGS = {
     "linear": (lambda u: u, "constant speed, abrupt start and stop, for comparison"),
 }
 ZOOM_DEFAULT, CURSOR_DEFAULT, SCROLL_DEFAULT = "spring", "ease-in-out", "ease-in-out"
+PAN_DEFAULT = "ease-in-out-soft"
+PAN_DURATION = 1.0    # s, the shortest camera pan; longer pans take a little longer
+PAN_GROWTH = 0.3      # each view width of distance adds this share of the duration, up to 2 widths
 # Average scroll speed in CSS px/s. ease-in-out peaks at 1.7x the average, about 850 px/s: some
 # 1.3 viewport heights per second at 640 px, slow enough that a room watching a projector can
 # follow the page. The wheel steps demorec sent before ran at about 2500 px/s.
 SCROLL_SPEED = 500.0
 SCROLL_MIN_DUR = 0.3  # s, so a short scroll is still seen to move
 SCROLL_RATE = 60      # wheel events per second, one per display frame
+
+
+def pan_duration(dist, view_w, base=PAN_DURATION):
+    """Seconds for a camera pan of dist CSS px with a view view_w px wide: base for a short pan,
+    growing gently with the distance, at most 1.6x base."""
+    return base * (1 + PAN_GROWTH * min(dist / max(view_w, 1), 2))
 
 
 def curve(name):

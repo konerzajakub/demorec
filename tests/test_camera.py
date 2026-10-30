@@ -8,6 +8,7 @@ from demorec.actor import Actor
 from demorec.camera import SWITCH_HOLD, Camera, fit, follow
 from demorec.cast import Cast, run_watched
 from demorec.config import Config
+from demorec.motion import pan_duration
 
 W, H = 1280, 720
 FF = shutil.which("ffmpeg")
@@ -243,6 +244,30 @@ def test_actor_zoom_takes_rect_from_locator(tmp_path):
     assert (s, d, easing) == (0, 0, "spring")  # not recording yet: the camera jumps, the video opens zoomed in
     assert view == pytest.approx(fit((100, 50, 200, 40), 640, 360, pad=10, max_zoom=2.5))
     assert out[3] == a.camera.full and out[4] == "quint"
+
+
+
+def test_zoom_at_the_same_scale_is_a_pan_with_its_own_defaults(tmp_path):
+    cfg = Config(project_dir=str(tmp_path), name="t", url="", width=640, height=360)
+    with sync_playwright() as p:
+        b = p.chromium.launch()
+        pg = b.new_page(viewport={"width": 640, "height": 360})
+        a = Actor(None, pg, None, cfg)
+        a.render = False
+        a.speed = 0.01  # the holds that show each move, not their recorded length
+        a._rolling = lambda: True
+        a._now = lambda: 0.0
+        a.zoom((100, 100, 10, 10), scale=1.4)
+        a.zoom((500, 100, 10, 10), scale=1.4)                  # pan, pan defaults
+        a.zoom((100, 100, 10, 10), scale=1.4, dur=0.5, easing="linear")  # pan, per call
+        a.zoom((100, 100, 10, 10), scale=1.2)                  # another zoom: zoom defaults
+        b.close()
+    zoom_in, pan, pan_call, zoom = a.camera.moves
+    assert (zoom_in[1], zoom_in[4]) == (1.0, "spring")
+    assert pan[4] == "ease-in-out-soft"
+    assert pan[1] == pytest.approx(pan_duration(pan[3][0] - zoom_in[3][0], zoom_in[3][2])) and pan[1] > 1.0
+    assert (pan_call[1], pan_call[4]) == (0.5, "linear")
+    assert (zoom[1], zoom[4]) == (1.0, "spring")
 
 
 PAGE = """<body style='margin:0;background:#fff'>

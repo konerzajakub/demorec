@@ -4,7 +4,7 @@ import math
 import pytest
 
 from demorec import config
-from demorec.motion import EASINGS, arc, curve, ease
+from demorec.motion import EASINGS, arc, curve, ease, pan_duration
 
 U = [i / 100 for i in range(101)]
 
@@ -59,6 +59,22 @@ def test_spring_is_quicker_than_ease_in_out_then_lands_softly():
     assert ease("spring", 0.3) > ease("ease-in-out", 0.3)
 
 
+def test_ease_in_out_soft_lands_softer_than_ease_in_out():
+    f, g, h = curve("ease-in-out-soft"), curve("ease-in-out"), 1e-3
+    assert f(h) / h < 0.01 and (1 - f(1 - h)) / h < 0.01  # zero speed at both ends
+    assert f(0.05) == pytest.approx(g(0.05), abs=0.01)  # the same gentle start
+    speed = [(f((i + 1) / 200) - f(i / 200)) * 200 for i in range(200)]
+    assert all(b < a for a, b in zip(speed[130:], speed[131:]))  # the last 35 %: only slowing down
+    assert speed[180] < (g(0.905) - g(0.9)) * 200 / 2  # at 90 % it moves less than half as fast
+
+
+def test_pan_duration_grows_gently_with_the_distance():
+    assert pan_duration(0, 512) == 1.0
+    assert 1.0 < pan_duration(256, 512) < pan_duration(512, 512) < pan_duration(1024, 512)
+    assert pan_duration(5000, 512) == pan_duration(1024, 512) == pytest.approx(1.6)
+    assert pan_duration(512, 512, base=2.0) == pytest.approx(2 * pan_duration(512, 512))
+
+
 def test_spring_soft_is_monotonic_from_0_to_1():
     v = [ease("spring-soft", i / 1000) for i in range(1001)]
     assert v[0] == 0 and v[-1] == 1
@@ -99,6 +115,10 @@ def test_motion_table_in_project_toml(tmp_path):
                                            'cursor_speed = 2\n[recording]\ncrop_zoom = 2\n', encoding="utf-8")
     cfg = config.load(tmp_path)
     assert (cfg.zoom_easing, cfg.cursor_easing, cfg.cursor_speed, cfg.crop_zoom) == ("quint", "ease-in-out", 2, 2)
+    assert (cfg.pan_easing, cfg.pan_duration) == ("ease-in-out-soft", 1.0)
+    (tmp_path / "project.toml").write_text('[app]\nurl = "http://x/"\n[motion]\npan_easing = "cubic"\npan_duration = 1.5\n',
+                                           encoding="utf-8")
+    assert (config.load(tmp_path).pan_easing, config.load(tmp_path).pan_duration) == ("cubic", 1.5)
     (tmp_path / "project.toml").write_text('[app]\nurl = "http://x/"\n[motion]\ncursor_easing = "wobbly"\n',
                                            encoding="utf-8")
     with pytest.raises(SystemExit, match="cursor_easing"):
