@@ -78,7 +78,58 @@ Run logs go to files, never stream them.
 - Native `<select>` and file pickers are drawn by the OS and are not captured. Show the click,
   then set the value with Playwright (see `projects/example/helpers.py`).
 - The browser print dialog is not captured. Use `a.print_preview()`.
-- Downloads: `a.download(locator, name)` returns the path, `a.show_file(path)` shows it in a tab.
+- Downloads: `a.download(locator, name)` returns the path, `a.show_file(path)` shows it in a
+  window of its own.
+- Small text the viewer must read (a price, a sample number): `a.zoom(locator)` or
+  `a.zoom((x, y, w, h))` glides the camera there, `a.zoom_out()` glides back. `scale=None` fits
+  the target with `pad=24` px around it, at most `max_zoom` (12). The camera stays until the next
+  `zoom` or `zoom_out` and pans along when the cursor would leave the picture. Only the video is
+  zoomed, the layout and the clicks stay as they are, so `zoom_out()` before a chapter ends whose
+  result lies outside the view. Keyframes show the zoom, `check` screenshots do not.
+- Zooms up to `crop_zoom` (1.5) crop the recorded frames. Larger ones make the browser render the
+  view magnified, so text stays sharp at any zoom, and the switch between the two is seamless.
+  While rendered, the zoom follows page scrolls, but keep the page still where you can: zoom out
+  before long scrolls. `print_preview()` zooms out first. `show_file` opens its own window, which
+  is never zoomed.
+- Opening on a small element (the app logo filling the frame), then the whole app:
+  `a.zoom(logo)` in `setup(a)`, then in the scene `a.hold(1.5)` and `a.zoom_out(dur=2.5)`. Park
+  the cursor away from the logo in `setup` (`a.mx, a.my = 700, 500`), it is magnified too. A
+  raster logo is only as sharp as its image file, SVG and text stay sharp.
+
+## Motion
+
+Zooms, pans and cursor moves accelerate and decelerate. The defaults are set, the person can
+tell you to change them for one move or for the whole project:
+
+- `[motion]` in `project.toml`: `zoom_easing = "spring"`, `zoom_duration = 1.0` (s),
+  `pan_easing = "ease-in-out-soft"`, `pan_duration = 1.0` (s, the shortest pan, longer ones up
+  to 1.6x), `cursor_easing = "ease-in-out"`, `cursor_speed = 1.0` (2 = twice as fast),
+  `cursor_curve = 0.05` (how much the cursor path bows, 0 = straight).
+- Scrolling glides: `scroll_easing = "ease-in-out"`, `scroll_speed = 500` (average px/s, peak
+  about 850, calm enough for a projector). Per call: `a.wheel(dy, dur=..., easing=...)`,
+  `a.scroll_by(dy, dur=...)`, `a.center(loc, dur=...)`.
+- Pans: the camera pans when it follows the cursor, and a `zoom` to a target at the current
+  scale is a pan too (`a.zoom(loc, scale=2.5)` while at 2.5x). Pans take `pan_easing` and
+  `pan_duration`, not the cursor's, so the camera may glide on a little after the cursor has
+  arrived. Per call: `a.zoom(loc, scale=..., dur=..., easing=...)`.
+- One call: `a.zoom(loc, dur=1.5, easing="quint")`, `a.zoom_out(easing=...)`,
+  `a.move(x, y, easing=...)`, `a.hover(loc, easing=...)`, `a.click(loc, easing=...)`.
+- Easings (`src/demorec/motion.py`, compared in `docs/media/motion/`):
+  - `spring`: critically damped spring, Apple's default: quick start, long soft landing, no
+    overshoot. Default for zooms.
+  - `spring-soft`: spring with a gentle start: no jump on the first frame, same long soft
+    landing.
+  - `snappy`: spring with a small overshoot.
+  - `bouncy`: spring with a visible overshoot, playful.
+  - `human`: minimum-jerk curve of a hand reaching for a target, symmetric.
+  - `ease-in-out`: CSS ease-in-out, gentle. Default for the cursor and for scrolling.
+  - `ease-in-out-soft`: the same gentle start, then a long soft landing without a snap into
+    place. Default for pans.
+  - `cubic`: slow ends, fast middle.
+  - `quint`: very slow ends, fast middle, cinematic.
+  - `material`: Material 3 standard, fast start, long deceleration.
+  - `smoothstep`: what demorec used before, mild.
+  - `linear`: constant speed, abrupt start and stop.
 
 ## Canvas apps and scrolling
 
