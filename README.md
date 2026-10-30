@@ -53,13 +53,20 @@ Scripted demo videos of web applications.
 - The cursor follows a minimum-jerk curve, like a hand reaching for a target, on a slightly bent path.
 - The wheel scrolls at a calm, eased pace, about 500 px/s on average.
 - Change all of these in `[motion]` in `project.toml` or per call, `AGENTS.md` lists the options.
-- The same moves with each easing, the default top left:
+- One kind of move per GIF, each tile with another easing, the default top left.
+  `docs/media/motion/make_gifs.py` records and builds them again.
 
-![spring, snappy, bouncy and human easing](docs/media/motion/easing-springs.gif)
+Zoom in and out:
 
-![spring, ease-in-out, cubic and quint easing](docs/media/motion/easing-curves.gif)
+![Zoom in and out with spring, spring-soft, snappy, bouncy, ease-in-out and linear easing](docs/media/motion/zoom-easing.gif)
 
-![spring, material, smoothstep and linear easing](docs/media/motion/easing-others.gif)
+Pan while zoomed in:
+
+![Camera pan with spring, spring-soft, snappy, bouncy, ease-in-out and linear easing](docs/media/motion/pan-easing.gif)
+
+Cursor:
+
+![Cursor moves with human, ease-in-out, cubic, smoothstep, spring and linear easing](docs/media/motion/cursor-easing.gif)
 
 ## Install
 
