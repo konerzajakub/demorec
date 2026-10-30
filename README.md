@@ -43,6 +43,23 @@ Scripted demo videos of web applications.
 - It copies your Claude or Codex login file into each Docker container, where the agent runs
   without approvals or sandbox.
 
+## Motion
+
+![The video opens with the app title filling the frame and zooms out to the whole app](docs/media/motion/opening-zoom-out.gif)
+
+- A demo can open on a small element, here the title zoomed about 10x, and zoom out to the app.
+- Zooms and pans use a critically damped spring by default, Apple's default animation: a quick
+  start and a long soft landing.
+- The cursor follows a minimum-jerk curve, like a hand reaching for a target, on a slightly bent path.
+- Change both in `[motion]` in `project.toml` or per call, `AGENTS.md` lists the options.
+- The same moves with each easing, the default top left:
+
+![spring, snappy, bouncy and human easing](docs/media/motion/easing-springs.gif)
+
+![spring, ease-in-out, cubic and quint easing](docs/media/motion/easing-curves.gif)
+
+![spring, material, smoothstep and linear easing](docs/media/motion/easing-others.gif)
+
 ## Install
 
 - Python 3.11+.
@@ -92,6 +109,10 @@ In `projects/<app>/out/<demo>/`:
 - The browser renders at twice its size (`scale` in `project.toml`), a 1280x720 browser gives a
   2560x1440 video with sharp text.
 - A drawn cursor follows the scripted mouse.
+- `a.zoom(target)` and `a.zoom_out()` move a camera over the recording, for small text on a
+  projector. The page layout is never changed.
+  - Up to 1.5x (`crop_zoom`), ffmpeg crops and scales the frames.
+  - Above it, the browser renders the view magnified, sharp up to `max_zoom` (12x).
 - ffmpeg encodes the frames with their real timing to H.264 at 30 fps.
 - Not captured, because they are outside the page: native select lists, the file dialog, the
   print dialog and the browser address bar. `AGENTS.md` describes the workarounds.
