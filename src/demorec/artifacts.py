@@ -23,17 +23,15 @@ def write_vtt(path, chapters, total):
             f.write("%d\n%s --> %s\n%s\n\n" % (i + 1, ts(start), ts(end), c["title"]))
 
 
-def write_keyframes(cast, chapters, total, out):
-    """The frame just before each chapter's end, as keyframes/NN-<chapter>.jpg. Sets
-    chapter["keyframe"] for the chapters that got one."""
+def write_keyframes(cast, chapters, total, out, camera=None):
+    """The frame just before each chapter's end as the video shows it (zoomed by the camera), as
+    keyframes/NN-<chapter>.jpg. Sets chapter["keyframe"] for the chapters that got one."""
     kd = os.path.join(out, "keyframes")
     shutil.rmtree(kd, ignore_errors=True)
     os.makedirs(kd)
     for i, (c, end) in enumerate(zip(chapters, _chapter_ends(chapters, total))):
-        src = cast.frame_at(max(c["start"], end - 0.3))
-        if src:
-            name = "%02d-%s.jpg" % (i + 1, slug(c["title"]))
-            shutil.copy(src, os.path.join(kd, name))
+        name = "%02d-%s.jpg" % (i + 1, slug(c["title"]))
+        if cast.still(max(c["start"], end - 0.3), os.path.join(kd, name), ffmpeg_path(), camera):
             c["keyframe"] = "keyframes/" + name
 
 

@@ -20,7 +20,17 @@ scroll = true                    # click/hover first wheel-scroll the target int
 fps = 30
 crf = 20                         # x264 quality, lower = bigger and sharper
 scale = 2                        # device pixels per CSS pixel, 2 = a 2880x1800 video from the 1440x900 browser
+video_scale = 0                  # video pixels per CSS pixel, 0 = scale
+max_zoom = 12                    # a.zoom() never zooms in further
+crop_zoom = 1.5                  # zooms up to this crop the frames, larger ones the browser renders sharp
 before = ""                      # shell command run in this folder before every record/check, e.g. "pwsh -File reset.ps1"
+
+[motion]                         # easings: spring snappy bouncy human ease-in-out cubic quint material smoothstep linear
+zoom_easing = "spring"           # zoom, zoom_out and the camera's pans
+zoom_duration = 1.0              # s
+cursor_easing = "human"
+cursor_speed = 1.0               # 2 = cursor moves take half as long
+cursor_curve = 0.05              # the cursor path bows by this fraction of its length, 0 = straight
 
 # Login form, filled before every run. Uncomment if the app needs a login. For other login
 # flows define login(a) in helpers.py instead. Values here are the Keycloak defaults.
