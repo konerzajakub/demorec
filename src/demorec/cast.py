@@ -7,6 +7,7 @@ for its real duration, so the video plays at the speed the scene ran. A separate
 import math, os, shutil, subprocess, sys, time
 
 from .cdp import devtools_port
+from .transitions import graph, pairs
 from .util import NO_WINDOW, log
 
 TRANSIENT = 0.5  # s: a frame of another size that a frame of the right size follows this soon is dropped
@@ -190,7 +191,9 @@ class Cast:
         vf.append("scale=%d:%d:flags=lanczos" % self.size)
         return ",".join(f for f in vf if f)
 
-    def encode(self, dst, ffmpeg, fps=30, crf=20, log_dir=None, camera=None):
+    def encode(self, dst, ffmpeg, fps=30, crf=20, log_dir=None, camera=None, transitions=None, slide=(1.3, "cubic")):
+        """Encode the frames from start() to stop() to dst. transitions: the scene's slides (see
+        transitions.py), slide: their (duration, easing). Returns the video length in seconds."""
         t0, end = self._clock()
         log_dir = log_dir or self.dir
         frames = self._fit_frames(self._usable_frames(self._recorded_frames(t0, end), camera), ffmpeg, log_dir)
@@ -208,20 +211,28 @@ class Cast:
             vf.append(cam)
         if self.size != (self.w, self.h):
             vf.append("scale=%d:%d:flags=lanczos" % self.size)
-        vf = ",".join(vf + ["format=yuv420p"])
+        length = end - t0
+        if transitions and pairs(transitions):
+            # Cut and slide after the camera: the slide moves the zoomed picture.
+            slides, length = graph(transitions, length, fps, *self.size, *slide)
+            opt, vf = "filter_complex", "[0:v]%s[c];%s;[v]format=yuv420p[out]" % (",".join(vf), slides)
+            map_args = ["-map", "[out]"]
+        else:
+            opt, vf, map_args = "vf", ",".join(vf + ["format=yuv420p"]), []
         if len(vf) > 20000:  # a long camera path would outgrow the Windows command line (32k)
             path = os.path.join(self.dir, "filters.txt")
             with open(path, "w", encoding="utf-8") as f:
                 f.write(vf)
-            vf_args = ["-/vf", path]  # ffmpeg 7+ reads the option from the file
+            vf_args = ["-/" + opt, path]  # ffmpeg 7+ reads the option from the file
         else:
-            vf_args = ["-vf", vf]
+            vf_args = ["-" + opt, vf]
         cmd = [ffmpeg, "-y", "-f", "concat", "-safe", "0", "-i", lst,
-               "-fps_mode", "cfr", "-r", str(fps), *vf_args, "-t", "%.3f" % (end - t0),
+               "-fps_mode", "cfr", "-r", str(fps), *vf_args, *map_args, "-t", "%.3f" % length,
                "-c:v", "libx264", "-preset", "slow", "-crf", str(crf), "-tune", "stillimage",
                "-movflags", "+faststart", "-an", dst]
         run_watched(cmd, os.path.join(log_dir, "encode-%s" % self.name))
         log("encoded", dst)
+        return length
 
     def still(self, t, dst, ffmpeg, camera=None):
         """The frame at t seconds as the video shows it, saved as JPEG. False without frames."""

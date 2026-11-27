@@ -67,6 +67,9 @@ Run logs go to files, never stream them.
   exists. Scope locators to the dialog or panel they live in.
 - Pace: `hold(1.5)` to `hold(2.5)` after each result the viewer should read, `hold(1.0)` after
   small steps. The viewer needs time to read: a 10-word message needs about 2 s.
+- After a result appears, `a.rest(loc)` leaves the cursor next to it without covering any text:
+  beside it, under it or in an empty part of it. `a.hover(loc)` puts the arrow on the text the
+  viewer wants to read.
 - A chapter ends where the next one starts. Wait for its result (`a.see(...)`) and hold before
   the next `chapter()` call, so the keyframe shows the outcome.
 - Things that disappear on their own (notifications, toasts) must be visible at the chapter's end.
@@ -79,22 +82,75 @@ Run logs go to files, never stream them.
   then set the value with Playwright (see `projects/example/helpers.py`).
 - The browser print dialog is not captured. Use `a.print_preview()`.
 - Downloads: `a.download(locator, name)` returns the path, `a.show_file(path)` shows it in a
-  window of its own.
+  window of its own and returns to the app in one call.
+- A downloaded PDF that a chapter's keyframe should show: `a.pdf_show(path)` puts it in the
+  browser's PDF viewer over the whole app, in the same tab, `a.pdf_scroll(600)` glides down it,
+  `a.pdf_hide()` returns to the app, also in the next chapter. A zoomed camera cuts to the full
+  frame, the drawn cursor hides over the PDF. It needs a browser with a PDF viewer:
+  `channel = "chromium"` (or `"chrome"`) in `[browser]`. With a transition:
+
+  ```python
+  pdf = a.download(dlg.get_by_role("button", name="PDF"), "quote.pdf", transition="pdf")
+  a.chapter("Quote PDF")
+  a.pdf_show(pdf)
+  a.transition_in("pdf")
+  a.pdf_scroll(600)
+  a.hold(1.0)
+  a.transition_out("pdf-close", back=True)
+  a.chapter("Next step")
+  a.pdf_hide()
+  a.transition_in("pdf-close")
+  ```
 - Small text the viewer must read (a price, a sample number): `a.zoom(locator)` or
   `a.zoom((x, y, w, h))` glides the camera there, `a.zoom_out()` glides back. `scale=None` fits
   the target with `pad=24` px around it, at most `max_zoom` (12). The camera stays until the next
   `zoom` or `zoom_out` and pans along when the cursor would leave the picture. Only the video is
   zoomed, the layout and the clicks stay as they are, so `zoom_out()` before a chapter ends whose
   result lies outside the view. Keyframes show the zoom, `check` screenshots do not.
+- Several elements in one zoom: `a.zoom([label, value])`, `a.rect(*locators, pad=0)` gives their
+  union as a rect.
+- A card, a panel section or a table whose whole width should fill the frame:
+  `a.zoom_card(card, *inner)`. `zoom` would zoom out until a tall card fits whole, `zoom_card`
+  keeps the width and cuts the card on one side only: at the bottom, or at the top if `inner`
+  (what must be seen, such as a total at the card's end) lies further down.
 - Zooms up to `crop_zoom` (1.5) crop the recorded frames. Larger ones make the browser render the
   view magnified, so text stays sharp at any zoom, and the switch between the two is seamless.
   While rendered, the zoom follows page scrolls, but keep the page still where you can: zoom out
-  before long scrolls. `print_preview()` zooms out first. `show_file` opens its own window, which
-  is never zoomed.
+  before long scrolls. `print_preview()` and `show_file()` zoom out first, `pdf_show()` cuts to
+  the full frame.
 - Opening on a small element (the app logo filling the frame), then the whole app:
   `a.zoom(logo)` in `setup(a)`, then in the scene `a.hold(1.5)` and `a.zoom_out(dur=2.5)`. Park
   the cursor away from the logo in `setup` (`a.mx, a.my = 700, 500`), it is magnified too. A
   raster logo is only as sharp as its image file, SVG and text stay sharp.
+
+## Transitions
+
+A transition cuts dead time (a page load, a download, a panel closing) and slides from one scene
+to the next instead, like switching desktops: the old scene, held at its last frame, slides out
+to the left while the new one slides in from the right.
+
+- `a.transition_out("<name>")` marks the last frame of the old scene, `a.transition_in("<name>")`
+  the first finished frame of the new one. The video cuts everything between them.
+- `transition_in` holds while the new scene slides in (`transition_duration`), the scene must not
+  move during that. The next `transition_out` must come after that hold.
+- `back=True` on `transition_out` slides the other way, for a return (closing what the first
+  slide opened).
+- Clicks: `a.click(loc, after=400)` and then `transition_out`, so the press is seen before the
+  slide. Downloads: `a.download(loc, name, transition="<name>")` marks it for you, the wait for the
+  file is cut.
+- A chapter that starts inside a cut starts with the slide. Keyframes show the last frame before
+  the cut. `result.json` lists the `transitions` with their time in the video and the cut length.
+- A video with transitions runs at `transition_fps` (60) so the slide is smooth. Settings:
+  `[motion] transition_duration = 1.3` (s), `transition_easing = "cubic"`, `[recording]
+  transition_fps = 60`.
+
+```python
+a.click(pg.get_by_role("link", name="Reports"), after=400)
+a.transition_out("reports")
+a.chapter("Monthly report")
+a.see("Monthly report")          # loading, cut from the video
+a.transition_in("reports")       # slides in, then holds still for the slide
+```
 
 ## Motion
 
@@ -134,8 +190,17 @@ tell you to change them for one move or for the whole project:
 ## Canvas apps and scrolling
 
 - `click` and `hover` first scroll the target into view with the mouse wheel, the way a person
-  would. Targets inside fixed or sticky containers are never scrolled. `safe_top` and
-  `safe_bottom` in `project.toml` are the heights of fixed bars that would cover a target.
+  would (`a.visible(loc)`). `safe_top` and `safe_bottom` in `project.toml` are the heights of
+  fixed bars that would cover a target.
+- Where it lands: `[browser] scroll_land`, `0.35` of the height by default. `"least"` scrolls as
+  little as shows the target whole: one below the view stops at the bottom edge, one above at the
+  top edge, so what the viewer was reading stays in view. Per call: `a.visible(loc, land="least")`.
+- Side panels, drawers and modal dialogs are fixed containers. The wheel scrolls inside them: the
+  cursor goes over the panel and its own scroll area moves, the page stays. Their clear area is
+  the scroll area's visible part. A sticky action bar or header inside it can still cover the
+  target: pass its edges, `a.visible(loc, land="least", top=150, bottom=110)` (viewport px), then
+  `a.click(loc, scroll=False)`.
+- Targets in a fixed header or a sticky bar that does not scroll are never scrolled.
 - In canvas apps (whiteboards, maps, editors) the wheel pans or zooms. Set `scroll = false`
   in `[browser]`. Then use `a.visible(loc)` explicitly where a real page scroll is needed.
 - Shapes on a canvas have no locators. Use `a.drag(x0, y0, x1, y1)` to draw or move,

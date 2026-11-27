@@ -29,6 +29,39 @@ def fit(rect, vw, vh, pad=24, scale=None, max_zoom=12.0):
     return (min(max(x + w / 2 - cw / 2, 0), vw - cw), min(max(y + h / 2 - ch / 2, 0), vh - ch), cw, ch)
 
 
+def union(rects, pad=0):
+    """The smallest rect (x, y, w, h) holding all rects, pad px larger on every side."""
+    x0 = min(r[0] for r in rects) - pad
+    y0 = min(r[1] for r in rects) - pad
+    x1 = max(r[0] + r[2] for r in rects) + pad
+    y1 = max(r[1] + r[3] for r in rects) + pad
+    return (x0, y0, x1 - x0, y1 - y0)
+
+
+def card_view(card, inner, vw, vh, pad=14):
+    """View in the viewport's aspect that shows the whole width of card (x, y, w, h) with pad px
+    around it. Unlike fit(), which zooms out until the whole rect fits, a card taller than that
+    view is cut on one side only: the view is anchored to the card's top edge, or to its bottom
+    edge if inner (a rect inside the card that must be seen) lies further down. If inner does
+    not fit either way, the view grows until it holds inner down to the card's bottom edge."""
+    cx, cy, cw, ch = card
+    ix, iy, iw, ih = inner
+    x, w = cx - pad, cw + 2 * pad
+    h = w * vh / vw
+    if ch + 2 * pad <= h:
+        y = cy + ch / 2 - h / 2  # the whole card fits: centered
+    elif iy + ih <= cy - pad + h:
+        y = cy - pad  # top edge kept, bottom cut
+    elif iy >= cy + ch + pad - h:
+        y = cy + ch + pad - h  # bottom edge kept, top cut
+    else:
+        bottom = cy + ch + pad
+        h = bottom - (iy - pad)
+        w2 = h * vw / vh
+        x, w, y = x - (w2 - w) / 2, w2, bottom - h
+    return (x, y, w, h)
+
+
 def follow(view, x, y, vw, vh, margin=0.1):
     """view shifted as little as possible so the point (x, y) lies inside it, margin (fraction of
     the view) away from its edges."""

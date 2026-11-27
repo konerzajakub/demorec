@@ -33,6 +33,8 @@ class Config:
     safe_bottom: int = 60
     fixed_header: int = 0         # px height of a fixed header whose elements never need scrolling
     scroll: bool = True           # click/hover scroll the target into view with the wheel first
+    scroll_land: float | str = 0.35  # where visible() puts a target it scrolls to: a fraction of the
+                                  # height, or "least" for the shortest scroll that shows it whole
     fps: int = 30
     crf: int = 20
     scale: int = 2                # device pixels per CSS pixel, 2 = a 2560x1440 video from a 1280x720 viewport
@@ -49,6 +51,9 @@ class Config:
     cursor_curve: float = 0.05    # [motion] the cursor path bows by this fraction of its length, 0 = straight
     scroll_easing: str = SCROLL_DEFAULT  # [motion] easing of wheel scrolls and center()
     scroll_speed: float = SCROLL_SPEED   # [motion] average px/s of a scroll, why 500 see motion.py
+    transition_easing: str = "cubic"     # [motion] easing of the slide between scenes, see transitions.py
+    transition_duration: float = 1.3     # [motion] s the slide takes
+    transition_fps: int = 60      # [recording] frame rate of a video with transitions, so the slide is smooth
     before: str = ""              # shell command run before every recording (reset demo data)
     login: Login | None = None
     out_dir: str = ""
@@ -59,10 +64,11 @@ class Config:
 # Config fields each table of project.toml can set. Keys a project leaves out keep the defaults above.
 TABLE_FIELDS = {
     "app": ("ready",),
-    "browser": ("width", "height", "locale", "timezone", "channel", "safe_top", "safe_bottom", "fixed_header", "scroll"),
-    "recording": ("fps", "crf", "scale", "video_scale", "max_zoom", "crop_zoom", "before"),
+    "browser": ("width", "height", "locale", "timezone", "channel", "safe_top", "safe_bottom", "fixed_header", "scroll",
+                "scroll_land"),
+    "recording": ("fps", "crf", "scale", "video_scale", "max_zoom", "crop_zoom", "before", "transition_fps"),
     "motion": ("zoom_easing", "zoom_duration", "pan_easing", "pan_duration", "cursor_easing", "cursor_speed",
-               "cursor_curve", "scroll_easing", "scroll_speed"),
+               "cursor_curve", "scroll_easing", "scroll_speed", "transition_easing", "transition_duration"),
 }
 
 
@@ -79,7 +85,7 @@ def load(project_dir, out_root=None):
         raise SystemExit("%s: [app] url is required" % path)
     settings = {key: d[table][key] for table, keys in TABLE_FIELDS.items()
                 for key in keys if key in d.get(table, {})}
-    for key in ("zoom_easing", "pan_easing", "cursor_easing", "scroll_easing"):
+    for key in ("zoom_easing", "pan_easing", "cursor_easing", "scroll_easing", "transition_easing"):
         try:
             curve(settings.get(key, "spring"))
         except ValueError as ex:  # a typo fails here, with the known names
@@ -88,6 +94,11 @@ def load(project_dir, out_root=None):
         raise SystemExit("%s: [motion] pan_duration must be above 0 (s)" % path)
     if settings.get("scroll_speed", 1) <= 0:
         raise SystemExit("%s: [motion] scroll_speed must be above 0 (px/s)" % path)
+    if settings.get("transition_duration", 1) <= 0:
+        raise SystemExit("%s: [motion] transition_duration must be above 0 (s)" % path)
+    land = settings.get("scroll_land", 0.35)
+    if land != "least" and (isinstance(land, bool) or not isinstance(land, (int, float)) or not 0 <= land <= 1):
+        raise SystemExit('%s: [browser] scroll_land must be "least" or a fraction from 0 to 1' % path)
     out = out_root or os.path.join(project_dir, "out")
     return Config(project_dir=project_dir, name=d.get("name") or os.path.basename(project_dir),
                   url=app_url(project_dir, app["url"]), login=read_login(d), out_dir=out,

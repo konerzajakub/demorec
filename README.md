@@ -124,6 +124,8 @@ In `projects/<app>/out/<demo>/`:
   - Up to 1.5x (`crop_zoom`), ffmpeg crops and scales the frames.
   - Above it, the browser renders the view magnified, sharp up to `max_zoom` (12x).
 - ffmpeg encodes the frames with their real timing to H.264 at 30 fps.
+- Scene transitions cut dead time (a page load, a download) and slide from the old scene to the
+  new one, like switching desktops. A video with transitions runs at 60 fps.
 - Not captured, because they are outside the page: native select lists, the file dialog, the
   print dialog and the browser address bar. `AGENTS.md` describes the workarounds.
 

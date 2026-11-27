@@ -3,10 +3,10 @@
 The mouse travels along an eased, slightly curved path, the wheel scrolls at a calm, eased pace,
 and text is typed key by key. Every method takes Playwright locators. Pauses (`hold`) are part of
 the video. Easings and durations come from [motion] in project.toml (see motion.py)."""
-import math, os, time
+import base64, math, os, time
 from pathlib import Path
 
-from .camera import SWITCH_HOLD, Camera, fit, follow
+from .camera import SWITCH_HOLD, Camera, card_view, fit, follow, union
 from .motion import arc, curve, ease, pan_duration, scroll_duration, scroll_steps
 from .util import log, slug
 
@@ -29,9 +29,62 @@ SCROLLER_JS = """(e, block) => {
   return Math.max(-s.scrollTop, Math.min(s.scrollHeight - s.clientHeight - s.scrollTop, d));
 }"""
 
-# True if e or one of its ancestors is position fixed or sticky.
-FIXED_JS = """e => { for (let n = e; n && n.nodeType === 1; n = n.parentElement) {
-  const p = getComputedStyle(n).position; if (p === 'fixed' || p === 'sticky') return true; } return false; }"""
+# Where e scrolls. {pinned: true} if a fixed or sticky element comes before any scrolling one on
+# the way up (a fixed header, a sticky toolbar): scrolling cannot move e. Else the nearest scrolling
+# ancestor: {box: [top, bottom, left, right]} of its visible part in the viewport (none for the
+# page) and {fixed: true} if it lies in a fixed container (a side panel, a modal dialog).
+AREA_JS = """e => {
+  let box = null;
+  for (let n = e; n && n.nodeType === 1 && n !== document.body && n !== document.documentElement; n = n.parentElement) {
+    const s = getComputedStyle(n);
+    if (!box && n !== e && /auto|scroll|overlay/.test(s.overflowY) && n.scrollHeight > n.clientHeight + 1) {
+      const r = n.getBoundingClientRect(), top = r.top + n.clientTop;
+      box = [Math.max(top, 0), Math.min(top + n.clientHeight, innerHeight), Math.max(r.left, 0), Math.min(r.right, innerWidth)];
+    }
+    if (s.position === 'fixed' || s.position === 'sticky')
+      return box ? {box, fixed: true} : {pinned: true};
+  }
+  return {box, fixed: false};
+}"""
+# The drawn cursor (cursor.js) is a 24 x 32 px arrow drawn 3 px left of and 2 px above its tip:
+# from the tip it covers about this much to the right and down.
+CURSOR_W, CURSOR_H = 22, 31
+
+# The first candidate point [x, y] where the cursor, its tip there, covers no text, no field, no
+# picture and no canvas, else null. Candidates are in order of preference.
+FREE_SPOT_JS = """([cands, cw, ch, vw, vh]) => {
+  const cursor = document.getElementById('__rec_cursor');
+  const boxes = [];
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  const range = document.createRange();
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    if (!n.textContent.trim()) continue;
+    range.selectNodeContents(n);
+    for (const r of range.getClientRects()) if (r.width && r.height) boxes.push(r);
+  }
+  for (const el of document.querySelectorAll('input, textarea, select, svg, img, canvas, video')) {
+    if (cursor && cursor.contains(el)) continue;
+    const r = el.getBoundingClientRect(); if (r.width && r.height) boxes.push(r);
+  }
+  const hit = (x, y) => boxes.some(r => x < r.right + 2 && x + cw > r.left - 2 && y < r.bottom + 2 && y + ch > r.top - 2);
+  for (const [x, y] of cands)
+    if (x > 4 && y > 4 && x + cw < vw - 4 && y + ch < vh - 4 && !hit(x, y)) return [x, y];
+  return null;
+}"""
+# A full-window frame over the app with Chromium's PDF viewer in it, without the page thumbnails.
+PDF_SHOW_JS = """b64 => {
+  const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+  const url = URL.createObjectURL(new Blob([bytes], {type: 'application/pdf'}));
+  const box = document.createElement('div');
+  box.id = '__demorec_pdf';
+  box.style.cssText = 'position:fixed;inset:0;z-index:2147483646;background:#525659';
+  const frame = document.createElement('iframe');
+  frame.src = url + '#navpanes=0';
+  frame.style.cssText = 'border:0;width:100%;height:100%';
+  box.appendChild(frame);
+  document.body.appendChild(box);
+}"""
+TWITCH = 48  # px: a least scroll this short, for a target already whole on screen, is left out
 
 
 class Actor:
@@ -49,6 +102,7 @@ class Actor:
         self.render = True   # big zooms rendered by the browser. Off in check mode and inspect
         self._cdp = None     # CDP session of the viewport override, see _show()
         self._shown = None   # (view, scrollX, scrollY) the browser renders now
+        self.transitions = []  # [{"name", "out", "in", "back"}], see transitions.py
 
     # ------------------------------------------------------------ structure
     def chapter(self, title):
@@ -66,6 +120,40 @@ class Actor:
             n = "%02d-%s.png" % (len(self.chapters), slug(self.chapters[-1]["title"]))
             self.pg.screenshot(path=os.path.join(self.shot_dir, n))
             self.chapters[-1]["screenshot"] = "check/" + n
+
+    # ------------------------------------------------------------ transitions
+    def transition_out(self, name, t=None, back=False):
+        """The last frame of the old scene: the video slides from here to transition_in(name),
+        the time between is cut. t: seconds on the recording clock, default now. back: a return
+        (closing what the slide opened), the slide goes the other way."""
+        now = self.cast.elapsed() if self.cast else 0.0
+        t = now if t is None else t
+        if any(tr["name"] == name for tr in self.transitions):
+            raise ValueError("transition %r is marked twice, every transition needs its own name" % name)
+        if self.transitions and self.transitions[-1]["in"] is None:
+            raise ValueError("transition_out(%r) before transition_in(%r)" % (name, self.transitions[-1]["name"]))
+        if self.transitions and t < self.transitions[-1]["in"] + self.cfg.transition_duration * self.speed - 1e-6:
+            raise ValueError("transition_out(%r) during the slide of %r, hold longer after transition_in()"
+                             % (name, self.transitions[-1]["name"]))
+        self.transitions.append({"name": name, "out": round(t, 4), "in": None, "back": back})
+        log("transition out %s %.3f%s" % (name, t, " back" if back else ""))
+
+    def transition_in(self, name, hold=True):
+        """The first finished frame of the new scene, the slide ends here. hold: wait while the new
+        scene slides in ([motion] transition_duration), it has to stand still for that."""
+        tr = self.transitions[-1] if self.transitions else None
+        if tr is None or tr["name"] != name or tr["in"] is not None:
+            raise ValueError("transition_in(%r) without transition_out(%r) before it" % (name, name))
+        tr["in"] = round(max(self.cast.elapsed() if self.cast else 0.0, tr["out"]), 4)
+        log("transition in %s %.3f" % (name, tr["in"]))
+        if hold:
+            self.hold(self.cfg.transition_duration + 1.0 / self.cfg.transition_fps)
+
+    def transitions_end(self):
+        """Called by the runner after the scene: every transition_out() needs its transition_in()."""
+        open_ = [tr["name"] for tr in self.transitions if tr["in"] is None]
+        if open_:
+            raise ValueError("transition_out(%r) has no transition_in()" % open_[0])
 
     # ------------------------------------------------------------ timing
     def wait(self, ms):
@@ -144,6 +232,26 @@ class Actor:
             self.visible(loc)
         self.move(*self.point(loc, fx, fy, dx, dy), easing=easing)
 
+    def rest(self, loc, scroll=None, easing=None):
+        """Point at loc and leave the cursor there without covering any text: beside it, under it
+        or in an empty part of it, the nearest free spot first. For a result the viewer should
+        read while the cursor waits. Without a free spot, the cursor goes to loc's bottom right
+        corner. Returns the point."""
+        loc = loc.first
+        if self.cfg.scroll if scroll is None else scroll:
+            self.visible(loc)
+        bb = self.box(loc)
+        x, y, w, h = bb["x"], bb["y"], bb["width"], bb["height"]
+        cands = [(x + w + 6, y + h * 0.5 - 6), (x + w - 4, y + h - 4), (x + w * 0.5, y + h + 4),
+                 (x + 8, y + h + 4), (x + w + 6, y + h + 2), (x - CURSOR_W - 6, y + h * 0.5)]
+        steps = max(2, int(w // 24))
+        cands += [(x + w * i / steps, y + h * f) for f in (0.55, 0.3, 0.75) for i in range(steps, -1, -1)]
+        spot = self.pg.evaluate(FREE_SPOT_JS, [cands, CURSOR_W, CURSOR_H, self.w, self.h])
+        if not spot:
+            spot = (x + w * 0.95, y + h * 0.9)
+        self.move(*spot, easing=easing)
+        return tuple(spot)
+
     def click(self, loc, fx=0.5, fy=0.5, dx=0, dy=0, scroll=None, after=500, easing=None):
         self.hover(loc, fx, fy, dx, dy, scroll, easing)
         self._press(after)
@@ -171,18 +279,39 @@ class Actor:
 
     # ------------------------------------------------------------ camera
     def zoom(self, target, scale=None, dur=None, pad=24, easing=None):
-        """Zoom the video in on a locator or a viewport rect (x, y, w, h), so small text can be
-        read. scale=None fits the target with pad px around it, up to max_zoom in project.toml.
+        """Zoom the video in on a locator, a list of locators (all of them in view) or a viewport
+        rect (x, y, w, h), so small text can be read. scale=None fits the target with pad px around it, up to max_zoom in project.toml.
         The camera glides there in dur seconds ([motion] zoom_duration) with easing ([motion]
         zoom_easing) and stays until the next zoom() or zoom_out(). Zooms up to crop_zoom crop
         the video, larger ones make the browser render the view magnified, sharp at any zoom.
         The page layout stays as it is. Called in setup(a), the video opens zoomed in.
         Zoomed in, a target at the same scale is a pan: dur and easing then default to
         [motion] pan_duration (growing a little with the distance) and pan_easing."""
-        if not isinstance(target, (tuple, list)):
-            bb = self.box(target)
-            target = (bb["x"], bb["y"], bb["width"], bb["height"])
-        self._camera(fit(target, self.w, self.h, pad, scale, self.camera.max_zoom), dur, easing)
+        self._camera(fit(self._rect(target), self.w, self.h, pad, scale, self.camera.max_zoom), dur, easing)
+
+    def zoom_card(self, card, *inner, pad=14, dur=None, easing=None):
+        """Zoom on a card (a bordered box, a panel section, a table) so its whole width fills the
+        frame. A card too tall for that is cut on one side only, at the bottom, or at the top if
+        inner (locators inside the card that must be seen, default the card's top) lies further
+        down. If inner does not fit either way, the camera zooms out until it does. pad: px
+        around the card. dur and easing as for zoom()."""
+        c = self._rect(card)
+        view = card_view(c, self._rect(list(inner)) if inner else (c[0], c[1], c[2], 1), self.w, self.h, pad)
+        self._camera(fit(view, self.w, self.h, 0, None, self.camera.max_zoom), dur, easing)
+
+    def rect(self, *locs, pad=0):
+        """The smallest viewport rect (x, y, w, h) holding all locators, pad px larger on every
+        side. a.zoom() takes it, or the locators as a list."""
+        boxes = [self.box(loc) for loc in locs]
+        return union([(b["x"], b["y"], b["width"], b["height"]) for b in boxes], pad)
+
+    def _rect(self, target):
+        """A viewport rect from a rect, a locator or a list of locators."""
+        if isinstance(target, (tuple, list)):
+            if all(isinstance(v, (int, float)) for v in target):
+                return tuple(target)
+            return self.rect(*target)
+        return self.rect(target)
 
     def zoom_out(self, dur=None, easing=None):
         """Glide back to the full frame."""
@@ -306,47 +435,99 @@ class Actor:
             if self._rendering():
                 self._tick()
 
-    def visible(self, loc, at=None, land=0.35):
-        """Scroll with the wheel until loc is fully in view. If it has to scroll, loc lands at
-        `land` (fraction of viewport height). Elements in the fixed header never scroll."""
+    def visible(self, loc, at=None, land=None, top=None, bottom=None):
+        """Scroll with the wheel until loc is fully in view. land: where loc lands if it has to
+        scroll, a fraction of the height, or "least" for the shortest scroll that shows it whole
+        (one below the view stops at the bottom edge, one above at the top edge), default
+        [browser] scroll_land. Elements in a fixed header never scroll. Inside a fixed
+        container (a side panel, a modal) the cursor goes over the container and its own
+        scrollbar moves, top and bottom (viewport px) are then the edges of its clear area, by
+        default the container's visible edges."""
         loc = loc.first
         loc.wait_for(state="visible", timeout=20000)
-        if loc.evaluate(FIXED_JS):
-            return  # inside a fixed or sticky container: scrolling cannot move it
+        area = loc.evaluate(AREA_JS)
+        if area.get("pinned"):
+            return  # inside a fixed or sticky container that does not scroll: scrolling cannot move it
+        land = self.cfg.scroll_land if land is None else land
+        box, fixed = area.get("box"), area.get("fixed")
+        if fixed:
+            lo, hi = box[0], box[1]
+        else:
+            lo, hi = self.cfg.safe_top, self.h - self.cfg.safe_bottom
+            if box:
+                lo, hi = max(lo, box[0]), min(hi, box[1])
+        lo = lo if top is None else top
+        hi = hi if bottom is None else self.h - bottom
+        if land == "least":
+            self._least(loc, at, box, lo, hi, fixed)
+        else:
+            self._land(loc, at, box, lo, hi, fixed, land)
+        self.wait(250)
+
+    def _land(self, loc, at, box, lo, hi, fixed, land):
+        """visible() with loc landing at land: one glide, the loop corrects what it missed."""
+        anchor, span = (lo + (hi - lo) * land, hi - lo) if fixed else (self.h * land, self.h)
         moved = False
         for _ in range(60):
             bb = loc.bounding_box()
             if bb is None:
                 break
             if not moved:
-                if self._in_view(bb):
+                if self._in_view(bb, lo, hi, page=not fixed):
                     break
-                self.move(*(at if at is not None else self._wheel_spot(bb)))
+                self.move(*(at if at is not None else self._wheel_spot(bb, box)))
                 moved = True
-            elif self.h * (land - 0.12) <= bb["y"] <= self.h * (land + 0.12):
+            elif abs(bb["y"] - anchor) <= span * 0.12:
                 break  # close enough to `land`
             y = bb["y"]
-            delta = y - self.h * land
-            step = max(40, min(2 * self.h, abs(delta)))  # one glide, the loop corrects what it missed
+            delta = y - anchor
+            step = max(40, min(2 * self.h, abs(delta)))
             self.wheel(step if delta > 0 else -step)
             self.wait(120)
             if self._stuck(loc, y):
                 self.center(loc)  # the wheel does not move this container, scroll it directly
                 break
-        self.wait(250)
 
-    def _in_view(self, bb):
+    def _least(self, loc, at, box, lo, hi, fixed):
+        """visible() with the shortest scroll: one eased glide, a short second one corrects what
+        the container's end (or content loaded on the way) left over."""
+        for attempt in range(2):
+            bb = loc.bounding_box()
+            if bb is None or self._in_view(bb, lo, hi, page=not fixed):
+                break
+            y, tall = bb["y"], min(bb["height"], hi - lo)
+            dy = y - lo if y < lo else y + tall - hi
+            if abs(dy) < 2:
+                break  # a rounding remainder, a zero wheel would look like a container that never scrolls
+            edge = box or (0, self.h)
+            if abs(dy) < TWITCH and y >= edge[0] and y + bb["height"] <= edge[1]:
+                break  # whole on screen, only inside the margin: a twitch of the page helps nobody
+            if attempt == 0:
+                self.move(*(at if at is not None else self._wheel_spot(bb, box)))
+            self.wheel(dy)
+            self.wait(150)
+            if self._stuck(loc, y):
+                self.center(loc, block="nearest")
+                break
+
+    def _in_view(self, bb, lo=None, hi=None, page=True):
         """bb is clear of the fixed bars (a tall one at least fills the space between them), or
         lies inside the fixed header."""
         header = self.cfg.fixed_header
-        if header and bb["y"] >= 0 and bb["y"] + bb["height"] <= header:
+        if page and header and bb["y"] >= 0 and bb["y"] + bb["height"] <= header:
             return True
-        lo, hi = self.cfg.safe_top, self.h - self.cfg.safe_bottom
-        return bb["y"] >= lo and bb["y"] + min(bb["height"], hi - lo) <= hi
+        lo = self.cfg.safe_top if lo is None else lo
+        hi = self.h - self.cfg.safe_bottom if hi is None else hi
+        return bb["y"] >= lo - 1 and bb["y"] + min(bb["height"], hi - lo) <= hi + 1
 
-    def _wheel_spot(self, bb):
-        """Where the cursor scrolls from: over the target's left part, below the middle."""
-        return min(max(bb["x"] + min(bb["width"] / 2, 80), 20), self.w - 30), self.h * 0.55
+    def _wheel_spot(self, bb, box=None):
+        """Where the cursor scrolls from: over the target's left part, below the middle, inside
+        the scrolling container if there is one (the wheel moves what is under the cursor)."""
+        x, y = bb["x"] + min(bb["width"] / 2, 80), self.h * 0.55
+        top, bottom, left, right = box or (0, self.h, 0, self.w)
+        x = min(max(x, left + 20, 20), right - 30, self.w - 30)
+        y = min(max(y, top + 20), bottom - 20)
+        return x, y
 
     def _stuck(self, loc, y):
         """loc is still at y after a wheel step, also on a second look."""
@@ -440,18 +621,65 @@ class Actor:
         self.wait(800)
         self.park()
 
-    def download(self, loc, name):
-        """Click loc, save the download under the work dir, return its path."""
+    def download(self, loc, name, transition=None, scroll=None):
+        """Click loc, save the download under the work dir, return its path. transition: the
+        name of a transition_out() marked as the button's press has been seen, so the wait for
+        the file is cut from the video."""
         with self.pg.expect_download(timeout=30000) as dl:
-            self.click(loc, after=300)
+            self.click(loc, scroll=scroll, after=400 if transition else 300)
+            if transition:
+                self.transition_out(transition)
         path = os.path.join(self.cfg.work_dir, "downloads", self.cast.name, name)
         os.makedirs(os.path.dirname(path), exist_ok=True)
         dl.value.save_as(path)
-        self.wait(1200)
+        if not transition:
+            self.wait(1200)
         return path
 
+    # ------------------------------------------------------------ PDF over the app
+    def pdf_show(self, path, wait=2.5):
+        """Show a local PDF (a download) in the browser's PDF viewer over the whole app, in the
+        same tab, until pdf_hide(). A chapter can end in between, so its keyframe shows the PDF.
+        A zoomed camera cuts to the full frame, the drawn cursor hides (the viewer gets the mouse
+        events, the cursor would freeze). Needs a browser with a PDF viewer: [browser] channel
+        "chromium" or "chrome", Playwright's default headless shell has none."""
+        if not self.pg.evaluate("navigator.pdfViewerEnabled"):
+            raise RuntimeError('this browser has no PDF viewer, set channel = "chromium" in [browser] of project.toml')
+        with open(path, "rb") as f:
+            data = base64.b64encode(f.read()).decode()
+        self._cursor_visible(False)
+        self.pg.evaluate(PDF_SHOW_JS, data)
+        if self.camera.at(self._now()) != self.camera.full:
+            self.zoom_out(dur=0)
+        self.pg.mouse.move(self.w / 2, self.h * 0.6)  # the viewer scrolls with the wheel under the pointer
+        self.wait(int(wait * 1000))
+
+    def pdf_scroll(self, dy=600, dur=None, easing=None):
+        """Scroll the shown PDF by dy px with the wheel, eased like wheel()."""
+        self._glide(dy, dur, easing, lambda step: self.pg.mouse.wheel(0, step))
+        self.wait(300)
+
+    def pdf_hide(self):
+        """Remove the PDF from pdf_show() and show the cursor where it was before."""
+        self.pg.evaluate("() => document.getElementById('__demorec_pdf')?.remove()")
+        # Over the viewer the page got no mouse events, tell cursor.js where the pointer is
+        # before the cursor shows again.
+        self.pg.mouse.move(self.mx - 1, self.my)
+        self.pg.mouse.move(self.mx, self.my)
+        self.wait(100)
+        self._cursor_visible(True)
+        self.wait(300)
+
+    def _cursor_visible(self, on):
+        self.pg.evaluate("on => { const c = document.getElementById('__rec_cursor');"
+                         " if (c) c.style.visibility = on ? '' : 'hidden'; }", on)
+
     def show_file(self, path, scroll_steps=0, hold=3.0):
-        """Open a local file (a downloaded PDF) in a new window, show it, return to the app."""
+        """Open a local file (a downloaded PDF) in a new window, show it, return to the app. A
+        zoomed camera zooms out first, the camera would crop the window too. For a PDF that a
+        chapter's keyframe should show, use pdf_show() and pdf_hide()."""
+        if self.camera.at(self._now()) != self.camera.full:
+            self.zoom_out()
         app = self.pg
         try:
             # A window, not a tab: in new headless Chrome a second tab shrinks the app's frames
@@ -464,7 +692,8 @@ class Actor:
         except Exception:
             tab = self.ctx.new_page()
         self.cast.attach(tab)
-        tab.goto(Path(path).resolve().as_uri())
+        uri = Path(path).resolve().as_uri()
+        tab.goto(uri + "#navpanes=0" if uri.lower().endswith(".pdf") else uri)
         tab.wait_for_timeout(2500)
         tab.mouse.move(self.w / 2, self.h / 2)
         for _ in range(scroll_steps):
