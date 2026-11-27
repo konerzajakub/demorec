@@ -90,16 +90,22 @@ def short_error(ex):
     return "%s: %s" % (type(ex).__name__, " | ".join(lines))
 
 
-def add_video(result, cast, chapters, total, out, output, cfg):
+def add_video(result, cast, camera, chapters, total, out, output, cfg):
     """Encode the frames and write everything that is cut from the video."""
     dst = os.path.join(out, output)
-    cast.encode(dst, ffmpeg_path(), cfg.fps, cfg.crf, log_dir=out)
+    cast.encode(dst, ffmpeg_path(), cfg.fps, cfg.crf, log_dir=out, camera=camera)
     result["video"] = output
     result["duration_s"] = total
     write_vtt(os.path.join(out, "chapters.vtt"), chapters, total)
     result["chapters_vtt"] = "chapters.vtt"
-    write_keyframes(cast, chapters, total, out)
+    write_keyframes(cast, chapters, total, out, camera)
     result["contact_sheet"] = write_contact(dst, out, total)
+
+
+def video_size(cfg):
+    """Video frame size: video_scale px per CSS px (0 = scale), even for H.264."""
+    vs = cfg.video_scale or cfg.scale
+    return round(cfg.width * vs / 2) * 2, round(cfg.height * vs / 2) * 2
 
 
 def run_demo(cfg, demo, check=False, keep_frames=False):
@@ -126,8 +132,10 @@ def run_demo(cfg, demo, check=False, keep_frames=False):
         run_before(cfg, out)
         with sync_playwright() as p:
             ctx, pg = open_context(p, cfg, profile)
-            cast = Cast(ctx, slug(demo), cfg.width * cfg.scale, cfg.height * cfg.scale, cfg.work_dir, profile)
+            cast = Cast(ctx, slug(demo), cfg.width * cfg.scale, cfg.height * cfg.scale, cfg.work_dir, profile,
+                        size=video_size(cfg))
             a = Actor(ctx, pg, cast, cfg)
+            a.render = not check  # check screenshots are never zoomed
             try:
                 play(a, scene, cfg, helpers, check, out)
                 result["status"] = "ok"
@@ -146,11 +154,11 @@ def run_demo(cfg, demo, check=False, keep_frames=False):
         result["missing_moments"] = [m for m in moments if m not in titles]
         result["unplanned_chapters"] = [t for t in titles if moments and t not in moments]
         if not check and result["status"] == "ok":
-            add_video(result, cast, a.chapters, total, out, output, cfg)
+            add_video(result, cast, a.camera, a.chapters, total, out, output, cfg)
         elif check:
             result["estimated_duration_s"] = round(total + a.saved, 1)
             result["note"] = ("check mode: nothing was captured, chapter starts are not real. "
-                              "chapters[].screenshot shows each chapter's end state. "
+                              "chapters[].screenshot shows each chapter's end state, never zoomed by the camera. "
                               "estimated_duration_s is the expected video length")
     except Exception as ex:
         log_exc()
@@ -183,6 +191,7 @@ def inspect(cfg, path="", demo=None, name="inspect"):
             ctx, pg = open_context(p, cfg, profile)
             a = Actor(ctx, pg, Cast(ctx, "inspect", cfg.width, cfg.height, cfg.work_dir), cfg)
             a.speed = CHECK_SPEED
+            a.render = False
             sign_in(a, cfg, helpers)
             if demo:
                 scene = load_scene(demo_dir(cfg, demo), "scene_inspect")

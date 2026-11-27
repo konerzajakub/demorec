@@ -72,11 +72,12 @@ def copy_template(src, dst, repl):
     """The project template without its demos, new-demo copies those one at a time."""
     for base, _, files in os.walk(src):
         rel = os.path.relpath(base, src)
-        if rel.startswith("demos"):
+        if rel.startswith("demos") or "__pycache__" in rel:
             continue
         os.makedirs(os.path.join(dst, rel), exist_ok=True)
         for fn in files:
-            render(os.path.join(base, fn), os.path.join(dst, rel, fn), repl)
+            if not fn.endswith(".pyc"):
+                render(os.path.join(base, fn), os.path.join(dst, rel, fn), repl)
 
 
 def cmd_new_project(args):
@@ -97,7 +98,8 @@ def cmd_new_demo(args):
     os.makedirs(dst)
     src = os.path.join(TEMPLATE, "demos", "_demo")
     for fn in os.listdir(src):
-        render(os.path.join(src, fn), os.path.join(dst, fn), {"{{demo}}": args.demo})
+        if os.path.isfile(os.path.join(src, fn)) and not fn.endswith(".pyc"):  # not __pycache__
+            render(os.path.join(src, fn), os.path.join(dst, fn), {"{{demo}}": args.demo})
     emit({"status": "ok", "demo": dst, "next": ["fill brief.md with the person", "write scene.py",
                                                 "demorec check %s %s" % (args.project, args.demo)]})
 
