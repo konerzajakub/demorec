@@ -67,6 +67,9 @@ Run logs go to files, never stream them.
   exists. Scope locators to the dialog or panel they live in.
 - Pace: `hold(1.5)` to `hold(2.5)` after each result the viewer should read, `hold(1.0)` after
   small steps. The viewer needs time to read: a 10-word message needs about 2 s.
+- After a result appears, `a.rest(loc)` leaves the cursor next to it without covering any text:
+  beside it, under it or in an empty part of it. `a.hover(loc)` puts the arrow on the text the
+  viewer wants to read.
 - A chapter ends where the next one starts. Wait for its result (`a.see(...)`) and hold before
   the next `chapter()` call, so the keyframe shows the outcome.
 - Things that disappear on their own (notifications, toasts) must be visible at the chapter's end.

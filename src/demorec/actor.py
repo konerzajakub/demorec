@@ -46,6 +46,31 @@ AREA_JS = """e => {
   }
   return {box, fixed: false};
 }"""
+# The drawn cursor (cursor.js) is a 24 x 32 px arrow drawn 3 px left of and 2 px above its tip:
+# from the tip it covers about this much to the right and down.
+CURSOR_W, CURSOR_H = 22, 31
+
+# The first candidate point [x, y] where the cursor, its tip there, covers no text, no field, no
+# picture and no canvas, else null. Candidates are in order of preference.
+FREE_SPOT_JS = """([cands, cw, ch, vw, vh]) => {
+  const cursor = document.getElementById('__rec_cursor');
+  const boxes = [];
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  const range = document.createRange();
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    if (!n.textContent.trim()) continue;
+    range.selectNodeContents(n);
+    for (const r of range.getClientRects()) if (r.width && r.height) boxes.push(r);
+  }
+  for (const el of document.querySelectorAll('input, textarea, select, svg, img, canvas, video')) {
+    if (cursor && cursor.contains(el)) continue;
+    const r = el.getBoundingClientRect(); if (r.width && r.height) boxes.push(r);
+  }
+  const hit = (x, y) => boxes.some(r => x < r.right + 2 && x + cw > r.left - 2 && y < r.bottom + 2 && y + ch > r.top - 2);
+  for (const [x, y] of cands)
+    if (x > 4 && y > 4 && x + cw < vw - 4 && y + ch < vh - 4 && !hit(x, y)) return [x, y];
+  return null;
+}"""
 TWITCH = 48  # px: a least scroll this short, for a target already whole on screen, is left out
 
 
@@ -193,6 +218,26 @@ class Actor:
         if self.cfg.scroll if scroll is None else scroll:
             self.visible(loc)
         self.move(*self.point(loc, fx, fy, dx, dy), easing=easing)
+
+    def rest(self, loc, scroll=None, easing=None):
+        """Point at loc and leave the cursor there without covering any text: beside it, under it
+        or in an empty part of it, the nearest free spot first. For a result the viewer should
+        read while the cursor waits. Without a free spot, the cursor goes to loc's bottom right
+        corner. Returns the point."""
+        loc = loc.first
+        if self.cfg.scroll if scroll is None else scroll:
+            self.visible(loc)
+        bb = self.box(loc)
+        x, y, w, h = bb["x"], bb["y"], bb["width"], bb["height"]
+        cands = [(x + w + 6, y + h * 0.5 - 6), (x + w - 4, y + h - 4), (x + w * 0.5, y + h + 4),
+                 (x + 8, y + h + 4), (x + w + 6, y + h + 2), (x - CURSOR_W - 6, y + h * 0.5)]
+        steps = max(2, int(w // 24))
+        cands += [(x + w * i / steps, y + h * f) for f in (0.55, 0.3, 0.75) for i in range(steps, -1, -1)]
+        spot = self.pg.evaluate(FREE_SPOT_JS, [cands, CURSOR_W, CURSOR_H, self.w, self.h])
+        if not spot:
+            spot = (x + w * 0.95, y + h * 0.9)
+        self.move(*spot, easing=easing)
+        return tuple(spot)
 
     def click(self, loc, fx=0.5, fy=0.5, dx=0, dy=0, scroll=None, after=500, easing=None):
         self.hover(loc, fx, fy, dx, dy, scroll, easing)
