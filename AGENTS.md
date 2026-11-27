@@ -107,6 +107,12 @@ Run logs go to files, never stream them.
   `zoom` or `zoom_out` and pans along when the cursor would leave the picture. Only the video is
   zoomed, the layout and the clicks stay as they are, so `zoom_out()` before a chapter ends whose
   result lies outside the view. Keyframes show the zoom, `check` screenshots do not.
+- Several elements in one zoom: `a.zoom([label, value])`, `a.rect(*locators, pad=0)` gives their
+  union as a rect.
+- A card, a panel section or a table whose whole width should fill the frame:
+  `a.zoom_card(card, *inner)`. `zoom` would zoom out until a tall card fits whole, `zoom_card`
+  keeps the width and cuts the card on one side only: at the bottom, or at the top if `inner`
+  (what must be seen, such as a total at the card's end) lies further down.
 - Zooms up to `crop_zoom` (1.5) crop the recorded frames. Larger ones make the browser render the
   view magnified, so text stays sharp at any zoom, and the switch between the two is seamless.
   While rendered, the zoom follows page scrolls, but keep the page still where you can: zoom out

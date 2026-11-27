@@ -5,7 +5,7 @@ import pytest
 from playwright.sync_api import sync_playwright
 
 from demorec.actor import Actor
-from demorec.camera import SWITCH_HOLD, Camera, fit, follow
+from demorec.camera import SWITCH_HOLD, Camera, card_view, fit, follow, union
 from demorec.cast import Cast, run_watched
 from demorec.config import Config
 from demorec.motion import pan_duration
@@ -322,3 +322,51 @@ def test_switch_to_render_keeps_its_last_frame(tmp_path):
     cam.render_on(1.0, SWITCH_HOLD)
     frames = [(0.0, raw), (1.01, mid), (1.03, rendered), (1.2, moving)]
     assert cast._usable_frames(frames, cam) == [(0.0, raw), (1.0 + SWITCH_HOLD, rendered), (1.2, moving)]
+
+
+def test_union_holds_every_rect():
+    assert union([(10, 20, 30, 40), (100, 5, 10, 10)]) == (10, 5, 100, 55)
+    assert union([(10, 20, 30, 40)], pad=5) == (5, 15, 40, 50)
+
+
+def test_card_view_keeps_the_card_whole_in_the_frame_aspect():
+    card = (100, 100, 400, 150)  # wide and short: the whole card, centered
+    x, y, w, h = card_view(card, card, W, H, pad=10)
+    assert (x, w) == (90, 420) and w / h == pytest.approx(W / H)
+    assert y + h / 2 == pytest.approx(175)
+    assert fit(card, W, H, pad=10)[2] == pytest.approx(420)  # fit gives the same for a card that fits
+
+
+def test_card_view_cuts_a_tall_card_on_one_side_only():
+    card = (100, 50, 400, 600)  # 420 px wide view is 236 px tall: the card does not fit
+    top = card_view(card, (120, 80, 100, 20), W, H, pad=10)  # inner near the top: top edge kept
+    assert top[1] == 40 and top[2] == 420
+    bottom = card_view(card, (120, 560, 100, 40), W, H, pad=10)  # inner near the bottom: bottom edge kept
+    assert bottom[1] + bottom[3] == pytest.approx(660) and bottom[2] == 420
+    grown = card_view(card, (120, 300, 100, 300), W, H, pad=10)  # too tall for either: zooms out to hold it
+    assert grown[1] == 290 and grown[1] + grown[3] == pytest.approx(660) and grown[2] / grown[3] == pytest.approx(W / H)
+    assert grown[0] + grown[2] / 2 == pytest.approx(300)  # still centered on the card
+    whole = fit(card, W, H, pad=10)  # fit zooms out until the whole card is in: about 1.1x instead of 3x
+    assert W / whole[2] < 1.2 and W / top[2] > 3
+
+
+def test_actor_zooms_on_several_locators_and_on_a_card(tmp_path):
+    cfg = Config(project_dir=str(tmp_path), name="t", url="", width=640, height=360)
+    with sync_playwright() as p:
+        b = p.chromium.launch()
+        pg = b.new_page(viewport={"width": 640, "height": 360})
+        pg.set_content("""<body style='margin:0'>
+          <div id=a style='position:absolute;left:100px;top:50px;width:50px;height:20px'></div>
+          <div id=b style='position:absolute;left:300px;top:120px;width:40px;height:30px'></div>
+          <div id=card style='position:absolute;left:200px;top:20px;width:200px;height:330px'>
+            <div id=total style='position:absolute;left:10px;top:300px;width:80px;height:20px'></div></div></body>""")
+        a = Actor(None, pg, None, cfg)
+        a.render = False
+        assert a.rect(pg.locator("#a"), pg.locator("#b"), pad=2) == (98, 48, 244, 104)
+        a.zoom([pg.locator("#a"), pg.locator("#b")], pad=0)
+        a.zoom_card(pg.locator("#card"), pg.locator("#total"), pad=10)
+        b.close()
+    both, card = (m[3] for m in a.camera.moves)
+    assert both == pytest.approx(fit((100, 50, 240, 100), 640, 360, pad=0))
+    assert card == pytest.approx(card_view((200, 20, 200, 330), (210, 320, 80, 20), 640, 360, pad=10))
+    assert card[1] + card[3] == pytest.approx(360)  # bottom edge kept: the total is in the picture

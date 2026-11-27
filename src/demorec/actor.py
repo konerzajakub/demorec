@@ -6,7 +6,7 @@ the video. Easings and durations come from [motion] in project.toml (see motion.
 import base64, math, os, time
 from pathlib import Path
 
-from .camera import SWITCH_HOLD, Camera, fit, follow
+from .camera import SWITCH_HOLD, Camera, card_view, fit, follow, union
 from .motion import arc, curve, ease, pan_duration, scroll_duration, scroll_steps
 from .util import log, slug
 
@@ -279,18 +279,39 @@ class Actor:
 
     # ------------------------------------------------------------ camera
     def zoom(self, target, scale=None, dur=None, pad=24, easing=None):
-        """Zoom the video in on a locator or a viewport rect (x, y, w, h), so small text can be
-        read. scale=None fits the target with pad px around it, up to max_zoom in project.toml.
+        """Zoom the video in on a locator, a list of locators (all of them in view) or a viewport
+        rect (x, y, w, h), so small text can be read. scale=None fits the target with pad px around it, up to max_zoom in project.toml.
         The camera glides there in dur seconds ([motion] zoom_duration) with easing ([motion]
         zoom_easing) and stays until the next zoom() or zoom_out(). Zooms up to crop_zoom crop
         the video, larger ones make the browser render the view magnified, sharp at any zoom.
         The page layout stays as it is. Called in setup(a), the video opens zoomed in.
         Zoomed in, a target at the same scale is a pan: dur and easing then default to
         [motion] pan_duration (growing a little with the distance) and pan_easing."""
-        if not isinstance(target, (tuple, list)):
-            bb = self.box(target)
-            target = (bb["x"], bb["y"], bb["width"], bb["height"])
-        self._camera(fit(target, self.w, self.h, pad, scale, self.camera.max_zoom), dur, easing)
+        self._camera(fit(self._rect(target), self.w, self.h, pad, scale, self.camera.max_zoom), dur, easing)
+
+    def zoom_card(self, card, *inner, pad=14, dur=None, easing=None):
+        """Zoom on a card (a bordered box, a panel section, a table) so its whole width fills the
+        frame. A card too tall for that is cut on one side only, at the bottom, or at the top if
+        inner (locators inside the card that must be seen, default the card's top) lies further
+        down. If inner does not fit either way, the camera zooms out until it does. pad: px
+        around the card. dur and easing as for zoom()."""
+        c = self._rect(card)
+        view = card_view(c, self._rect(list(inner)) if inner else (c[0], c[1], c[2], 1), self.w, self.h, pad)
+        self._camera(fit(view, self.w, self.h, 0, None, self.camera.max_zoom), dur, easing)
+
+    def rect(self, *locs, pad=0):
+        """The smallest viewport rect (x, y, w, h) holding all locators, pad px larger on every
+        side. a.zoom() takes it, or the locators as a list."""
+        boxes = [self.box(loc) for loc in locs]
+        return union([(b["x"], b["y"], b["width"], b["height"]) for b in boxes], pad)
+
+    def _rect(self, target):
+        """A viewport rect from a rect, a locator or a list of locators."""
+        if isinstance(target, (tuple, list)):
+            if all(isinstance(v, (int, float)) for v in target):
+                return tuple(target)
+            return self.rect(*target)
+        return self.rect(target)
 
     def zoom_out(self, dur=None, easing=None):
         """Glide back to the full frame."""
