@@ -49,6 +49,7 @@ class Actor:
         self.render = True   # big zooms rendered by the browser. Off in check mode and inspect
         self._cdp = None     # CDP session of the viewport override, see _show()
         self._shown = None   # (view, scrollX, scrollY) the browser renders now
+        self.transitions = []  # [{"name", "out", "in", "back"}], see transitions.py
 
     # ------------------------------------------------------------ structure
     def chapter(self, title):
@@ -66,6 +67,40 @@ class Actor:
             n = "%02d-%s.png" % (len(self.chapters), slug(self.chapters[-1]["title"]))
             self.pg.screenshot(path=os.path.join(self.shot_dir, n))
             self.chapters[-1]["screenshot"] = "check/" + n
+
+    # ------------------------------------------------------------ transitions
+    def transition_out(self, name, t=None, back=False):
+        """The last frame of the old scene: the video slides from here to transition_in(name),
+        the time between is cut. t: seconds on the recording clock, default now. back: a return
+        (closing what the slide opened), the slide goes the other way."""
+        now = self.cast.elapsed() if self.cast else 0.0
+        t = now if t is None else t
+        if any(tr["name"] == name for tr in self.transitions):
+            raise ValueError("transition %r is marked twice, every transition needs its own name" % name)
+        if self.transitions and self.transitions[-1]["in"] is None:
+            raise ValueError("transition_out(%r) before transition_in(%r)" % (name, self.transitions[-1]["name"]))
+        if self.transitions and t < self.transitions[-1]["in"] + self.cfg.transition_duration * self.speed - 1e-6:
+            raise ValueError("transition_out(%r) during the slide of %r, hold longer after transition_in()"
+                             % (name, self.transitions[-1]["name"]))
+        self.transitions.append({"name": name, "out": round(t, 4), "in": None, "back": back})
+        log("transition out %s %.3f%s" % (name, t, " back" if back else ""))
+
+    def transition_in(self, name, hold=True):
+        """The first finished frame of the new scene, the slide ends here. hold: wait while the new
+        scene slides in ([motion] transition_duration), it has to stand still for that."""
+        tr = self.transitions[-1] if self.transitions else None
+        if tr is None or tr["name"] != name or tr["in"] is not None:
+            raise ValueError("transition_in(%r) without transition_out(%r) before it" % (name, name))
+        tr["in"] = round(max(self.cast.elapsed() if self.cast else 0.0, tr["out"]), 4)
+        log("transition in %s %.3f" % (name, tr["in"]))
+        if hold:
+            self.hold(self.cfg.transition_duration + 1.0 / self.cfg.transition_fps)
+
+    def transitions_end(self):
+        """Called by the runner after the scene: every transition_out() needs its transition_in()."""
+        open_ = [tr["name"] for tr in self.transitions if tr["in"] is None]
+        if open_:
+            raise ValueError("transition_out(%r) has no transition_in()" % open_[0])
 
     # ------------------------------------------------------------ timing
     def wait(self, ms):
@@ -440,14 +475,19 @@ class Actor:
         self.wait(800)
         self.park()
 
-    def download(self, loc, name):
-        """Click loc, save the download under the work dir, return its path."""
+    def download(self, loc, name, transition=None, scroll=None):
+        """Click loc, save the download under the work dir, return its path. transition: the
+        name of a transition_out() marked as the button's press has been seen, so the wait for
+        the file is cut from the video."""
         with self.pg.expect_download(timeout=30000) as dl:
-            self.click(loc, after=300)
+            self.click(loc, scroll=scroll, after=400 if transition else 300)
+            if transition:
+                self.transition_out(transition)
         path = os.path.join(self.cfg.work_dir, "downloads", self.cast.name, name)
         os.makedirs(os.path.dirname(path), exist_ok=True)
         dl.value.save_as(path)
-        self.wait(1200)
+        if not transition:
+            self.wait(1200)
         return path
 
     def show_file(self, path, scroll_steps=0, hold=3.0):

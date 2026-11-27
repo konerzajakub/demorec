@@ -96,6 +96,35 @@ Run logs go to files, never stream them.
   the cursor away from the logo in `setup` (`a.mx, a.my = 700, 500`), it is magnified too. A
   raster logo is only as sharp as its image file, SVG and text stay sharp.
 
+## Transitions
+
+A transition cuts dead time (a page load, a download, a panel closing) and slides from one scene
+to the next instead, like switching desktops: the old scene, held at its last frame, slides out
+to the left while the new one slides in from the right.
+
+- `a.transition_out("<name>")` marks the last frame of the old scene, `a.transition_in("<name>")`
+  the first finished frame of the new one. The video cuts everything between them.
+- `transition_in` holds while the new scene slides in (`transition_duration`), the scene must not
+  move during that. The next `transition_out` must come after that hold.
+- `back=True` on `transition_out` slides the other way, for a return (closing what the first
+  slide opened).
+- Clicks: `a.click(loc, after=400)` and then `transition_out`, so the press is seen before the
+  slide. Downloads: `a.download(loc, name, transition="<name>")` marks it for you, the wait for the
+  file is cut.
+- A chapter that starts inside a cut starts with the slide. Keyframes show the last frame before
+  the cut. `result.json` lists the `transitions` with their time in the video and the cut length.
+- A video with transitions runs at `transition_fps` (60) so the slide is smooth. Settings:
+  `[motion] transition_duration = 1.3` (s), `transition_easing = "cubic"`, `[recording]
+  transition_fps = 60`.
+
+```python
+a.click(pg.get_by_role("link", name="Reports"), after=400)
+a.transition_out("reports")
+a.chapter("Monthly report")
+a.see("Monthly report")          # loading, cut from the video
+a.transition_in("reports")       # slides in, then holds still for the slide
+```
+
 ## Motion
 
 Zooms, pans and cursor moves accelerate and decelerate. The defaults are set, the person can

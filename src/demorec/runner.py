@@ -3,7 +3,7 @@
 Artifacts of `demos/<id>` go to `<project>/out/<id>/`:
   <output>.mp4      the video (record mode only)
   result.json       status, duration, chapters, key moments without a chapter, error, artifact paths
-  chapters.vtt      WebVTT chapter list
+  chapters.vtt      WebVTT chapter list, its times after the cuts of scene transitions
   keyframes/        one frame at the end of each chapter, named NN-<chapter>.jpg
   contact.jpg       grid of frames every few seconds
   check/            check mode only: a screenshot at the end of each chapter
@@ -20,6 +20,7 @@ from .artifacts import clear_failure, save_failure, write_contact, write_keyfram
 from .brief import key_moments
 from .browser import new_profile, open_context, save_aria_tree, sign_in
 from .cast import Cast
+from .transitions import cut_total, pairs, remap
 from .util import ffmpeg_path, log, log_exc, slug
 
 CHECK_SPEED = 0.05  # check mode and inspect play every pause and move at this fraction
@@ -80,6 +81,7 @@ def play(a, scene, cfg, helpers, check, out):
     a.cast.start()
     a.hold(1.5)
     scene.scene(a)
+    a.transitions_end()
     a.hold(2.5)
     a.chapter_end()
 
@@ -90,15 +92,25 @@ def short_error(ex):
     return "%s: %s" % (type(ex).__name__, " | ".join(lines))
 
 
-def add_video(result, cast, camera, chapters, total, out, output, cfg):
-    """Encode the frames and write everything that is cut from the video."""
+def add_video(result, cast, camera, chapters, total, out, output, cfg, transitions=()):
+    """Encode the frames and write everything that is cut from the video. With transitions the
+    video runs at transition_fps and the chapter times move back by the cut time."""
     dst = os.path.join(out, output)
-    cast.encode(dst, ffmpeg_path(), cfg.fps, cfg.crf, log_dir=out, camera=camera)
+    trs = pairs(transitions)
+    fps = max(cfg.fps, cfg.transition_fps) if trs else cfg.fps
+    cast.encode(dst, ffmpeg_path(), fps, cfg.crf, log_dir=out, camera=camera, transitions=trs,
+                slide=(cfg.transition_duration, cfg.transition_easing))
+    write_keyframes(cast, chapters, total, out, camera, trs)  # from the recorded frames, before the remap
+    if trs:
+        for c in chapters:
+            c["start"] = round(remap(c["start"], trs), 2)
+        result["transitions"] = [{"name": t["name"], "at": round(remap(t["out"], trs), 2),
+                                  "cut_s": round(t["in"] - t["out"], 2), "back": t["back"]} for t in trs]
+        total = round(total - cut_total(trs), 2)
     result["video"] = output
     result["duration_s"] = total
     write_vtt(os.path.join(out, "chapters.vtt"), chapters, total)
     result["chapters_vtt"] = "chapters.vtt"
-    write_keyframes(cast, chapters, total, out, camera)
     result["contact_sheet"] = write_contact(dst, out, total)
 
 
@@ -154,9 +166,9 @@ def run_demo(cfg, demo, check=False, keep_frames=False):
         result["missing_moments"] = [m for m in moments if m not in titles]
         result["unplanned_chapters"] = [t for t in titles if moments and t not in moments]
         if not check and result["status"] == "ok":
-            add_video(result, cast, a.camera, a.chapters, total, out, output, cfg)
+            add_video(result, cast, a.camera, a.chapters, total, out, output, cfg, a.transitions)
         elif check:
-            result["estimated_duration_s"] = round(total + a.saved, 1)
+            result["estimated_duration_s"] = round(total + a.saved - cut_total(a.transitions), 1)
             result["note"] = ("check mode: nothing was captured, chapter starts are not real. "
                               "chapters[].screenshot shows each chapter's end state, never zoomed by the camera. "
                               "estimated_duration_s is the expected video length")

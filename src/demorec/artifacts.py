@@ -3,6 +3,7 @@ state. The full list of the out folder is in runner.py."""
 import os, shutil, subprocess
 
 from .browser import save_aria_tree
+from .transitions import shown
 from .util import NO_WINDOW, ffmpeg_path, slug
 
 FAILURE_FILES = ("failure.png", "failure.aria.yml")
@@ -23,15 +24,17 @@ def write_vtt(path, chapters, total):
             f.write("%d\n%s --> %s\n%s\n\n" % (i + 1, ts(start), ts(end), c["title"]))
 
 
-def write_keyframes(cast, chapters, total, out, camera=None):
+def write_keyframes(cast, chapters, total, out, camera=None, transitions=()):
     """The frame just before each chapter's end as the video shows it (zoomed by the camera), as
-    keyframes/NN-<chapter>.jpg. Sets chapter["keyframe"] for the chapters that got one."""
+    keyframes/NN-<chapter>.jpg. Sets chapter["keyframe"] for the chapters that got one. Times are
+    on the recording clock: a time inside the cut of a transition becomes its out mark."""
     kd = os.path.join(out, "keyframes")
     shutil.rmtree(kd, ignore_errors=True)
     os.makedirs(kd)
     for i, (c, end) in enumerate(zip(chapters, _chapter_ends(chapters, total))):
         name = "%02d-%s.jpg" % (i + 1, slug(c["title"]))
-        if cast.still(max(c["start"], end - 0.3), os.path.join(kd, name), ffmpeg_path(), camera):
+        t = shown(max(c["start"], end - 0.3), transitions)
+        if cast.still(t, os.path.join(kd, name), ffmpeg_path(), camera):
             c["keyframe"] = "keyframes/" + name
 
 
