@@ -82,7 +82,25 @@ Run logs go to files, never stream them.
   then set the value with Playwright (see `projects/example/helpers.py`).
 - The browser print dialog is not captured. Use `a.print_preview()`.
 - Downloads: `a.download(locator, name)` returns the path, `a.show_file(path)` shows it in a
-  window of its own.
+  window of its own and returns to the app in one call.
+- A downloaded PDF that a chapter's keyframe should show: `a.pdf_show(path)` puts it in the
+  browser's PDF viewer over the whole app, in the same tab, `a.pdf_scroll(600)` glides down it,
+  `a.pdf_hide()` returns to the app, also in the next chapter. A zoomed camera cuts to the full
+  frame, the drawn cursor hides over the PDF. It needs a browser with a PDF viewer:
+  `channel = "chromium"` (or `"chrome"`) in `[browser]`. With a transition:
+
+  ```python
+  pdf = a.download(dlg.get_by_role("button", name="PDF"), "quote.pdf", transition="pdf")
+  a.chapter("Quote PDF")
+  a.pdf_show(pdf)
+  a.transition_in("pdf")
+  a.pdf_scroll(600)
+  a.hold(1.0)
+  a.transition_out("pdf-close", back=True)
+  a.chapter("Next step")
+  a.pdf_hide()
+  a.transition_in("pdf-close")
+  ```
 - Small text the viewer must read (a price, a sample number): `a.zoom(locator)` or
   `a.zoom((x, y, w, h))` glides the camera there, `a.zoom_out()` glides back. `scale=None` fits
   the target with `pad=24` px around it, at most `max_zoom` (12). The camera stays until the next
@@ -92,8 +110,8 @@ Run logs go to files, never stream them.
 - Zooms up to `crop_zoom` (1.5) crop the recorded frames. Larger ones make the browser render the
   view magnified, so text stays sharp at any zoom, and the switch between the two is seamless.
   While rendered, the zoom follows page scrolls, but keep the page still where you can: zoom out
-  before long scrolls. `print_preview()` zooms out first. `show_file` opens its own window, which
-  is never zoomed.
+  before long scrolls. `print_preview()` and `show_file()` zoom out first, `pdf_show()` cuts to
+  the full frame.
 - Opening on a small element (the app logo filling the frame), then the whole app:
   `a.zoom(logo)` in `setup(a)`, then in the scene `a.hold(1.5)` and `a.zoom_out(dur=2.5)`. Park
   the cursor away from the logo in `setup` (`a.mx, a.my = 700, 500`), it is magnified too. A

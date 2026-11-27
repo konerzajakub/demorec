@@ -9,7 +9,8 @@ width = 1440
 height = 900
 locale = "en-US"                 # also the language of the browser UI and date formats
 timezone = "UTC"
-channel = ""                     # "chrome" = installed Google Chrome, empty = Playwright Chromium
+channel = ""                     # "chrome" = installed Google Chrome, empty = Playwright Chromium (its headless
+                                 # shell, no PDF viewer), "chromium" = Playwright Chromium with a PDF viewer
 safe_top = 80                    # px covered by fixed bars at the top, elements above it get scrolled into view
 safe_bottom = 60
 fixed_header = 0                 # px height of a fixed header, its elements are never scrolled to

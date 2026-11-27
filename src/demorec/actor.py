@@ -3,7 +3,7 @@
 The mouse travels along an eased, slightly curved path, the wheel scrolls at a calm, eased pace,
 and text is typed key by key. Every method takes Playwright locators. Pauses (`hold`) are part of
 the video. Easings and durations come from [motion] in project.toml (see motion.py)."""
-import math, os, time
+import base64, math, os, time
 from pathlib import Path
 
 from .camera import SWITCH_HOLD, Camera, fit, follow
@@ -70,6 +70,19 @@ FREE_SPOT_JS = """([cands, cw, ch, vw, vh]) => {
   for (const [x, y] of cands)
     if (x > 4 && y > 4 && x + cw < vw - 4 && y + ch < vh - 4 && !hit(x, y)) return [x, y];
   return null;
+}"""
+# A full-window frame over the app with Chromium's PDF viewer in it, without the page thumbnails.
+PDF_SHOW_JS = """b64 => {
+  const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+  const url = URL.createObjectURL(new Blob([bytes], {type: 'application/pdf'}));
+  const box = document.createElement('div');
+  box.id = '__demorec_pdf';
+  box.style.cssText = 'position:fixed;inset:0;z-index:2147483646;background:#525659';
+  const frame = document.createElement('iframe');
+  frame.src = url + '#navpanes=0';
+  frame.style.cssText = 'border:0;width:100%;height:100%';
+  box.appendChild(frame);
+  document.body.appendChild(box);
 }"""
 TWITCH = 48  # px: a least scroll this short, for a target already whole on screen, is left out
 
@@ -602,8 +615,50 @@ class Actor:
             self.wait(1200)
         return path
 
+    # ------------------------------------------------------------ PDF over the app
+    def pdf_show(self, path, wait=2.5):
+        """Show a local PDF (a download) in the browser's PDF viewer over the whole app, in the
+        same tab, until pdf_hide(). A chapter can end in between, so its keyframe shows the PDF.
+        A zoomed camera cuts to the full frame, the drawn cursor hides (the viewer gets the mouse
+        events, the cursor would freeze). Needs a browser with a PDF viewer: [browser] channel
+        "chromium" or "chrome", Playwright's default headless shell has none."""
+        if not self.pg.evaluate("navigator.pdfViewerEnabled"):
+            raise RuntimeError('this browser has no PDF viewer, set channel = "chromium" in [browser] of project.toml')
+        with open(path, "rb") as f:
+            data = base64.b64encode(f.read()).decode()
+        self._cursor_visible(False)
+        self.pg.evaluate(PDF_SHOW_JS, data)
+        if self.camera.at(self._now()) != self.camera.full:
+            self.zoom_out(dur=0)
+        self.pg.mouse.move(self.w / 2, self.h * 0.6)  # the viewer scrolls with the wheel under the pointer
+        self.wait(int(wait * 1000))
+
+    def pdf_scroll(self, dy=600, dur=None, easing=None):
+        """Scroll the shown PDF by dy px with the wheel, eased like wheel()."""
+        self._glide(dy, dur, easing, lambda step: self.pg.mouse.wheel(0, step))
+        self.wait(300)
+
+    def pdf_hide(self):
+        """Remove the PDF from pdf_show() and show the cursor where it was before."""
+        self.pg.evaluate("() => document.getElementById('__demorec_pdf')?.remove()")
+        # Over the viewer the page got no mouse events, tell cursor.js where the pointer is
+        # before the cursor shows again.
+        self.pg.mouse.move(self.mx - 1, self.my)
+        self.pg.mouse.move(self.mx, self.my)
+        self.wait(100)
+        self._cursor_visible(True)
+        self.wait(300)
+
+    def _cursor_visible(self, on):
+        self.pg.evaluate("on => { const c = document.getElementById('__rec_cursor');"
+                         " if (c) c.style.visibility = on ? '' : 'hidden'; }", on)
+
     def show_file(self, path, scroll_steps=0, hold=3.0):
-        """Open a local file (a downloaded PDF) in a new window, show it, return to the app."""
+        """Open a local file (a downloaded PDF) in a new window, show it, return to the app. A
+        zoomed camera zooms out first, the camera would crop the window too. For a PDF that a
+        chapter's keyframe should show, use pdf_show() and pdf_hide()."""
+        if self.camera.at(self._now()) != self.camera.full:
+            self.zoom_out()
         app = self.pg
         try:
             # A window, not a tab: in new headless Chrome a second tab shrinks the app's frames
@@ -616,7 +671,8 @@ class Actor:
         except Exception:
             tab = self.ctx.new_page()
         self.cast.attach(tab)
-        tab.goto(Path(path).resolve().as_uri())
+        uri = Path(path).resolve().as_uri()
+        tab.goto(uri + "#navpanes=0" if uri.lower().endswith(".pdf") else uri)
         tab.wait_for_timeout(2500)
         tab.mouse.move(self.w / 2, self.h / 2)
         for _ in range(scroll_steps):
