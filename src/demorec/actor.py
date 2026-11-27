@@ -29,9 +29,24 @@ SCROLLER_JS = """(e, block) => {
   return Math.max(-s.scrollTop, Math.min(s.scrollHeight - s.clientHeight - s.scrollTop, d));
 }"""
 
-# True if e or one of its ancestors is position fixed or sticky.
-FIXED_JS = """e => { for (let n = e; n && n.nodeType === 1; n = n.parentElement) {
-  const p = getComputedStyle(n).position; if (p === 'fixed' || p === 'sticky') return true; } return false; }"""
+# Where e scrolls. {pinned: true} if a fixed or sticky element comes before any scrolling one on
+# the way up (a fixed header, a sticky toolbar): scrolling cannot move e. Else the nearest scrolling
+# ancestor: {box: [top, bottom, left, right]} of its visible part in the viewport (none for the
+# page) and {fixed: true} if it lies in a fixed container (a side panel, a modal dialog).
+AREA_JS = """e => {
+  let box = null;
+  for (let n = e; n && n.nodeType === 1 && n !== document.body && n !== document.documentElement; n = n.parentElement) {
+    const s = getComputedStyle(n);
+    if (!box && n !== e && /auto|scroll|overlay/.test(s.overflowY) && n.scrollHeight > n.clientHeight + 1) {
+      const r = n.getBoundingClientRect(), top = r.top + n.clientTop;
+      box = [Math.max(top, 0), Math.min(top + n.clientHeight, innerHeight), Math.max(r.left, 0), Math.min(r.right, innerWidth)];
+    }
+    if (s.position === 'fixed' || s.position === 'sticky')
+      return box ? {box, fixed: true} : {pinned: true};
+  }
+  return {box, fixed: false};
+}"""
+TWITCH = 48  # px: a least scroll this short, for a target already whole on screen, is left out
 
 
 class Actor:
@@ -341,47 +356,99 @@ class Actor:
             if self._rendering():
                 self._tick()
 
-    def visible(self, loc, at=None, land=0.35):
-        """Scroll with the wheel until loc is fully in view. If it has to scroll, loc lands at
-        `land` (fraction of viewport height). Elements in the fixed header never scroll."""
+    def visible(self, loc, at=None, land=None, top=None, bottom=None):
+        """Scroll with the wheel until loc is fully in view. land: where loc lands if it has to
+        scroll, a fraction of the height, or "least" for the shortest scroll that shows it whole
+        (one below the view stops at the bottom edge, one above at the top edge), default
+        [browser] scroll_land. Elements in a fixed header never scroll. Inside a fixed
+        container (a side panel, a modal) the cursor goes over the container and its own
+        scrollbar moves, top and bottom (viewport px) are then the edges of its clear area, by
+        default the container's visible edges."""
         loc = loc.first
         loc.wait_for(state="visible", timeout=20000)
-        if loc.evaluate(FIXED_JS):
-            return  # inside a fixed or sticky container: scrolling cannot move it
+        area = loc.evaluate(AREA_JS)
+        if area.get("pinned"):
+            return  # inside a fixed or sticky container that does not scroll: scrolling cannot move it
+        land = self.cfg.scroll_land if land is None else land
+        box, fixed = area.get("box"), area.get("fixed")
+        if fixed:
+            lo, hi = box[0], box[1]
+        else:
+            lo, hi = self.cfg.safe_top, self.h - self.cfg.safe_bottom
+            if box:
+                lo, hi = max(lo, box[0]), min(hi, box[1])
+        lo = lo if top is None else top
+        hi = hi if bottom is None else self.h - bottom
+        if land == "least":
+            self._least(loc, at, box, lo, hi, fixed)
+        else:
+            self._land(loc, at, box, lo, hi, fixed, land)
+        self.wait(250)
+
+    def _land(self, loc, at, box, lo, hi, fixed, land):
+        """visible() with loc landing at land: one glide, the loop corrects what it missed."""
+        anchor, span = (lo + (hi - lo) * land, hi - lo) if fixed else (self.h * land, self.h)
         moved = False
         for _ in range(60):
             bb = loc.bounding_box()
             if bb is None:
                 break
             if not moved:
-                if self._in_view(bb):
+                if self._in_view(bb, lo, hi, page=not fixed):
                     break
-                self.move(*(at if at is not None else self._wheel_spot(bb)))
+                self.move(*(at if at is not None else self._wheel_spot(bb, box)))
                 moved = True
-            elif self.h * (land - 0.12) <= bb["y"] <= self.h * (land + 0.12):
+            elif abs(bb["y"] - anchor) <= span * 0.12:
                 break  # close enough to `land`
             y = bb["y"]
-            delta = y - self.h * land
-            step = max(40, min(2 * self.h, abs(delta)))  # one glide, the loop corrects what it missed
+            delta = y - anchor
+            step = max(40, min(2 * self.h, abs(delta)))
             self.wheel(step if delta > 0 else -step)
             self.wait(120)
             if self._stuck(loc, y):
                 self.center(loc)  # the wheel does not move this container, scroll it directly
                 break
-        self.wait(250)
 
-    def _in_view(self, bb):
+    def _least(self, loc, at, box, lo, hi, fixed):
+        """visible() with the shortest scroll: one eased glide, a short second one corrects what
+        the container's end (or content loaded on the way) left over."""
+        for attempt in range(2):
+            bb = loc.bounding_box()
+            if bb is None or self._in_view(bb, lo, hi, page=not fixed):
+                break
+            y, tall = bb["y"], min(bb["height"], hi - lo)
+            dy = y - lo if y < lo else y + tall - hi
+            if abs(dy) < 2:
+                break  # a rounding remainder, a zero wheel would look like a container that never scrolls
+            edge = box or (0, self.h)
+            if abs(dy) < TWITCH and y >= edge[0] and y + bb["height"] <= edge[1]:
+                break  # whole on screen, only inside the margin: a twitch of the page helps nobody
+            if attempt == 0:
+                self.move(*(at if at is not None else self._wheel_spot(bb, box)))
+            self.wheel(dy)
+            self.wait(150)
+            if self._stuck(loc, y):
+                self.center(loc, block="nearest")
+                break
+
+    def _in_view(self, bb, lo=None, hi=None, page=True):
         """bb is clear of the fixed bars (a tall one at least fills the space between them), or
         lies inside the fixed header."""
         header = self.cfg.fixed_header
-        if header and bb["y"] >= 0 and bb["y"] + bb["height"] <= header:
+        if page and header and bb["y"] >= 0 and bb["y"] + bb["height"] <= header:
             return True
-        lo, hi = self.cfg.safe_top, self.h - self.cfg.safe_bottom
-        return bb["y"] >= lo and bb["y"] + min(bb["height"], hi - lo) <= hi
+        lo = self.cfg.safe_top if lo is None else lo
+        hi = self.h - self.cfg.safe_bottom if hi is None else hi
+        return bb["y"] >= lo - 1 and bb["y"] + min(bb["height"], hi - lo) <= hi + 1
 
-    def _wheel_spot(self, bb):
-        """Where the cursor scrolls from: over the target's left part, below the middle."""
-        return min(max(bb["x"] + min(bb["width"] / 2, 80), 20), self.w - 30), self.h * 0.55
+    def _wheel_spot(self, bb, box=None):
+        """Where the cursor scrolls from: over the target's left part, below the middle, inside
+        the scrolling container if there is one (the wheel moves what is under the cursor)."""
+        x, y = bb["x"] + min(bb["width"] / 2, 80), self.h * 0.55
+        top, bottom, left, right = box or (0, self.h, 0, self.w)
+        x = min(max(x, left + 20, 20), right - 30, self.w - 30)
+        y = min(max(y, top + 20), bottom - 20)
+        return x, y
 
     def _stuck(self, loc, y):
         """loc is still at y after a wheel step, also on a second look."""

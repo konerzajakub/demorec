@@ -125,3 +125,61 @@ def test_visible_lands_the_target(actor):
     y = row.bounding_box()["y"]
     assert 360 * 0.2 <= y <= 360 * 0.5
     assert len(a.pg.evaluate("wheels")) > 30  # a glide, not a jump
+
+
+# A side panel the way UI libraries build one: fixed, a header, a scrolling body, an action bar.
+DRAWER = """<style>body { margin: 0 } .row { height: 40px }</style>
+<div id=rows></div>
+<div id=drawer style='position:fixed;right:0;top:0;width:260px;height:360px;display:flex;flex-direction:column'>
+  <div style='height:50px'>Header</div>
+  <div id=body style='flex:1;overflow:auto'></div>
+  <div style='height:50px'><button id=save>Save</button></div>
+</div>
+<script>
+  for (let i = 0; i < 100; i++) rows.insertAdjacentHTML('beforeend', `<div class=row id=r${i}>row ${i}</div>`);
+  for (let i = 0; i < 40; i++) body.insertAdjacentHTML('beforeend', `<div class=row id=i${i}>item ${i}</div>`);
+  window.wheels = [];
+  addEventListener('wheel', e => wheels.push([performance.now(), e.deltaY, e.isTrusted]), {passive: true});
+</script>"""
+
+
+def test_visible_wheels_inside_a_fixed_panel(actor):
+    a = actor
+    a.pg.set_content(DRAWER)
+    item = a.pg.locator("#i20")
+    a.visible(item)  # default land 0.35 of the panel body (50 to 310 px)
+    assert a.pg.evaluate("body.scrollTop") > 0 and a.pg.evaluate("scrollY") == 0
+    assert len(a.pg.evaluate("wheels")) > 10 and all(t for _, _, t in a.pg.evaluate("wheels"))  # the wheel, no script
+    y = item.bounding_box()["y"]
+    assert 50 + 260 * 0.35 - 40 <= y <= 50 + 260 * 0.35 + 40
+    assert a.mx >= 640 - 260  # the cursor went over the panel, the wheel moves what is under it
+
+
+def test_least_scroll_shows_the_target_at_the_nearest_edge(actor):
+    a = actor
+    a.pg.set_content(DRAWER)
+    below, above = a.pg.locator("#i20"), a.pg.locator("#i2")
+    a.visible(below, land="least")
+    bb = below.bounding_box()
+    assert bb["y"] + bb["height"] == pytest.approx(310, abs=2)  # stops at the body's bottom edge
+    a.visible(above, land="least")
+    assert above.bounding_box()["y"] == pytest.approx(50, abs=2)  # and at the top edge going up
+    a.pg.evaluate("wheels.length = 0")
+    a.visible(a.pg.locator("#save"))  # in the action bar, which does not scroll
+    a.visible(a.pg.locator("#i3"), land="least", top=60)  # whole on screen, 30 px in the margin: no twitch
+    assert a.pg.evaluate("wheels") == []
+    row = a.pg.locator("#r60")
+    a.visible(row, land="least")  # the page, below the view: the row's bottom at the viewport's bottom
+    bb = row.bounding_box()
+    assert bb["y"] + bb["height"] == pytest.approx(360, abs=2)
+
+
+def test_scroll_land_in_project_toml(tmp_path):
+    toml = tmp_path / "project.toml"
+    for value, want in (("0.5", 0.5), ('"least"', "least")):
+        toml.write_text('[app]\nurl = "http://x/"\n[browser]\nscroll_land = %s\n' % value, encoding="utf-8")
+        assert config.load(tmp_path).scroll_land == want
+    for bad in ('"nearest"', "2", "true"):
+        toml.write_text('[app]\nurl = "http://x/"\n[browser]\nscroll_land = %s\n' % bad, encoding="utf-8")
+        with pytest.raises(SystemExit, match="scroll_land"):
+            config.load(tmp_path)

@@ -163,8 +163,17 @@ tell you to change them for one move or for the whole project:
 ## Canvas apps and scrolling
 
 - `click` and `hover` first scroll the target into view with the mouse wheel, the way a person
-  would. Targets inside fixed or sticky containers are never scrolled. `safe_top` and
-  `safe_bottom` in `project.toml` are the heights of fixed bars that would cover a target.
+  would (`a.visible(loc)`). `safe_top` and `safe_bottom` in `project.toml` are the heights of
+  fixed bars that would cover a target.
+- Where it lands: `[browser] scroll_land`, `0.35` of the height by default. `"least"` scrolls as
+  little as shows the target whole: one below the view stops at the bottom edge, one above at the
+  top edge, so what the viewer was reading stays in view. Per call: `a.visible(loc, land="least")`.
+- Side panels, drawers and modal dialogs are fixed containers. The wheel scrolls inside them: the
+  cursor goes over the panel and its own scroll area moves, the page stays. Their clear area is
+  the scroll area's visible part. A sticky action bar or header inside it can still cover the
+  target: pass its edges, `a.visible(loc, land="least", top=150, bottom=110)` (viewport px), then
+  `a.click(loc, scroll=False)`.
+- Targets in a fixed header or a sticky bar that does not scroll are never scrolled.
 - In canvas apps (whiteboards, maps, editors) the wheel pans or zooms. Set `scroll = false`
   in `[browser]`. Then use `a.visible(loc)` explicitly where a real page scroll is needed.
 - Shapes on a canvas have no locators. Use `a.drag(x0, y0, x1, y1)` to draw or move,

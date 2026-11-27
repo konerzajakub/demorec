@@ -15,6 +15,8 @@ safe_bottom = 60
 fixed_header = 0                 # px height of a fixed header, its elements are never scrolled to
 scroll = true                    # click/hover first wheel-scroll the target into view. false for canvas apps,
                                  # where the wheel pans or zooms instead of scrolling
+scroll_land = 0.35               # where a scrolled-to target lands (fraction of the height), "least" = the
+                                 # shortest scroll that shows it whole
 
 [recording]
 fps = 30
