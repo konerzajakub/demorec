@@ -41,7 +41,14 @@ def _spring_soft(ramp=0.2, land=0.15, n=2000):
     def speed(u):  # derivative of _spring(0.0)
         return w * w * u * math.exp(-w * u) + rest * 6 * u * (1 - u)
 
-    v = [speed(i / n) * _smoothstep(i / n / ramp) * _smoothstep((1 - i / n) / land) for i in range(n + 1)]
+    return _integrate([speed(i / n) * _smoothstep(i / n / ramp) * _smoothstep((1 - i / n) / land)
+                       for i in range(n + 1)])
+
+
+def _integrate(v):
+    """Easing whose speed is the sampled profile v (n + 1 samples from u = 0 to 1), integrated
+    and rescaled to end at exactly 1."""
+    n = len(v) - 1
     acc = [0.0]
     for i in range(n):
         acc.append(acc[-1] + (v[i] + v[i + 1]) / 2)
@@ -55,6 +62,17 @@ def _spring_soft(ramp=0.2, land=0.15, n=2000):
         k = min(int(u * n), n - 1)
         return acc[k] + (acc[k + 1] - acc[k]) * (u * n - k)
     return f
+
+
+def _spring_in_out(ramp=0.25, n=2000):
+    """Symmetric, spring-like at both ends: the speed rises along the critically damped spring's
+    own path squeezed into the first `ramp` of the duration, holds a broad plateau (about 1.2x
+    the average speed) and lands on the mirrored path. Zero speed at both ends."""
+    w = 2 * math.pi
+
+    def x(t):
+        return 1 - (1 + w * t) * math.exp(-w * t) if t > 0 else 0.0
+    return _integrate([x(i / n / ramp) * x((1 - i / n) / ramp) for i in range(n + 1)])
 
 
 def _bezier(x1, y1, x2, y2):
@@ -90,11 +108,14 @@ def _in_out(p):
 EASINGS = {
     "spring": (_spring(0.0), "critically damped spring, Apple's default (bounce 0): quick start, long soft landing, no overshoot"),
     "spring-soft": (_spring_soft(), "spring with a gentle start: no jump on the first frame, same long soft landing"),
+    "spring-reverse": ((lambda s: lambda u: 1 - s(1 - u))(_spring(0.0)), "the spring mirrored in time: long gentle start, the speed builds, quick soft stop. For a zoom in that ends on a detail"),
+    "spring-in-out": (_spring_in_out(), "symmetric, spring-like at both ends: quick but soft build-up, a broad even middle, the mirrored landing"),
     "snappy": (_spring(0.2), "spring with a small overshoot (bounce 0.2), lively but calm"),
     "bouncy": (_spring(0.3), "spring with a visible overshoot (bounce 0.3), playful"),
     "human": (lambda u: u * u * u * (10 + u * (6 * u - 15)), "minimum-jerk curve of a human hand reaching for a target (Flash and Hogan 1985), symmetric"),
     "ease-in-out": (_bezier(0.42, 0, 0.58, 1), "CSS ease-in-out, cubic-bezier(.42, 0, .58, 1), gentle"),
     "ease-in-out-soft": (_bezier(0.45, 0, 0.25, 1), "cubic-bezier(.45, 0, .25, 1): gentle start like ease-in-out, then a long soft landing without a snap into place"),
+    "quad": (_in_out(2), "easeInOutQuad, the mildest of the power curves"),
     "cubic": (_in_out(3), "easeInOutCubic, slow ends and a fast middle"),
     "quint": (_in_out(5), "easeInOutQuint, very slow ends and a fast middle, cinematic"),
     "material": (_bezier(0.2, 0, 0, 1), "Material 3 standard, cubic-bezier(.2, 0, 0, 1): fast start, long deceleration"),

@@ -115,13 +115,23 @@ Run logs go to files, never stream them.
   (what must be seen, such as a total at the card's end) lies further down.
 - Zooms up to `crop_zoom` (1.5) crop the recorded frames. Larger ones make the browser render the
   view magnified, so text stays sharp at any zoom, and the switch between the two is seamless.
+  `record` renders those `zoom` and `zoom_out` moves frame by frame: the recording clock pauses,
+  each video frame is a still the browser has drawn completely, and the video shows the move at
+  its real pace. So a deep zoom (10x to 1x) never shows blank tiles. The page must stand still
+  during such a move: animations and loading run on while the stills are rendered.
+  `[recording] still_zoom = false` plays them live. Pans that follow the cursor stay live.
   While rendered, the zoom follows page scrolls, but keep the page still where you can: zoom out
   before long scrolls. `print_preview()` and `show_file()` zoom out first, `pdf_show()` cuts to
   the full frame.
 - Opening on a small element (the app logo filling the frame), then the whole app:
-  `a.zoom(logo)` in `setup(a)`, then in the scene `a.hold(1.5)` and `a.zoom_out(dur=2.5)`. Park
-  the cursor away from the logo in `setup` (`a.mx, a.my = 700, 500`), it is magnified too. A
-  raster logo is only as sharp as its image file, SVG and text stay sharp.
+  `a.zoom(logo)` in `setup(a)`, then in the scene `a.hold(1.5)` and
+  `a.zoom_out(dur=2.0, easing="spring-soft")`. Park the cursor away from the logo in `setup`
+  (`a.mx, a.my = 700, 500`), it is magnified too. A raster logo is only as sharp as its image
+  file, SVG and text stay sharp.
+- Closing on an element, the reverse: `a.zoom(logo, dur=2.0, easing="spring-reverse")` from the
+  full frame, then `a.hold(1.5)`. A cut straight into a zoom: `a.zoom(target, dur=0)`.
+- The zoom changes at an even pace on a log scale: 10x to 5x takes as long as 2x to 1x, so a
+  deep zoom does not rush through its first half. The point the two views share stays put.
 
 ## Transitions
 
@@ -174,13 +184,17 @@ tell you to change them for one move or for the whole project:
   - `spring`: critically damped spring, Apple's default: quick start, long soft landing, no
     overshoot. Default for zooms.
   - `spring-soft`: spring with a gentle start: no jump on the first frame, same long soft
-    landing.
+    landing. Good for a deep zoom out, such as the opening zoom out of a logo.
+  - `spring-reverse`: the spring mirrored in time: long gentle start, quick soft stop. For a
+    zoom in that ends on a detail.
+  - `spring-in-out`: symmetric, spring-like at both ends, a broad even middle.
   - `snappy`: spring with a small overshoot.
   - `bouncy`: spring with a visible overshoot, playful.
   - `human`: minimum-jerk curve of a hand reaching for a target, symmetric.
   - `ease-in-out`: CSS ease-in-out, gentle. Default for the cursor and for scrolling.
   - `ease-in-out-soft`: the same gentle start, then a long soft landing without a snap into
     place. Default for pans.
+  - `quad`: mild ease-in-out, the softest power curve.
   - `cubic`: slow ends, fast middle.
   - `quint`: very slow ends, fast middle, cinematic.
   - `material`: Material 3 standard, fast start, long deceleration.

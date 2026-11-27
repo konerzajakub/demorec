@@ -3,7 +3,11 @@
 The screencast reads frames from the browser itself, so recording works headless and on a
 locked workstation. Each frame keeps its browser timestamp, and the encoder holds every frame
 for its real duration, so the video plays at the speed the scene ran. A separate process
-(capture.py) receives the frames, so the scene's own work never holds them back."""
+(capture.py) receives the frames, so the scene's own work never holds them back.
+
+The recording clock can pause (pause() and resume()): the time between does not exist in the
+video, the screencast frames of it are dropped. Frames rendered one by one in the meantime
+(add_still) can fill the span the clock skips ahead on resume(advance)."""
 import math, os, shutil, subprocess, sys, time
 
 from .cdp import devtools_port
@@ -32,6 +36,8 @@ class Cast:
         self.end = None
         self.t0 = None
         self.offset = None  # browser frame clock minus time.time(), they can differ by seconds
+        self.pauses = []  # [wall clock start, end, advance]: spans cut from the recording clock, see pause()
+        self.stills = []  # (recording time, path): frames rendered one by one, see add_still()
 
     # ------------------------------------------------------------ capture
     def attach(self, page):
@@ -90,18 +96,62 @@ class Cast:
         log("cast start", self.name)
 
     def stop(self):
-        self.end = time.time()
+        if self.pauses and self.pauses[-1][1] is None:
+            self.resume()
+        self.end = time.time() - self.paused()
         self._stop_reader()
         self._read_indexes()
+        self._apply_pauses()
         log("cast stop", self.name, len(self.frames), "frames", self.sizes)
 
     def elapsed(self):
-        return time.time() - self.t0 if self.t0 else 0.0
+        """Seconds on the recording clock: since start(), without the paused spans."""
+        return time.time() - self.t0 - self.paused() if self.t0 else 0.0
+
+    def pause(self):
+        """Stop the recording clock. Until resume(), elapsed() stands still and the screencast
+        frames are dropped. For work the video must not show in real time, such as rendering a
+        camera move frame by frame (add_still)."""
+        if self.pauses and self.pauses[-1][1] is None:
+            raise RuntimeError("the recording is already paused")
+        self.pauses.append([time.time(), None, 0.0])
+
+    def resume(self, advance=0.0):
+        """Run the recording clock again. advance: seconds it skips ahead at once, the span the
+        stills added during the pause fill. Without stills there the last frame before holds."""
+        self.pauses[-1][1:] = [time.time(), advance]
+
+    def paused(self, wall=None):
+        """Seconds the recording clock lags the wall clock at wall (default now): the paused time
+        before it, less what resume() skipped ahead. A running pause counts up to wall."""
+        wall = time.time() if wall is None else wall
+        return sum(min(e if e is not None else wall, wall) - s - (a if e is not None and e <= wall else 0)
+                   for s, e, a in self.pauses if s < wall)
+
+    def add_still(self, t, path):
+        """A frame rendered by the scene, shown from t seconds on the recording clock until the
+        next frame. Its size must be the capture size (w, h)."""
+        self.stills.append((t, path))
+
+    def _apply_pauses(self):
+        """Screencast frames onto the recording clock: frames inside a pause are dropped, later
+        ones move back by the paused time. Then the stills join them."""
+        if not self.pauses and not self.stills:
+            return
+        o = self.offset if self.offset is not None else 0.0
+        frames = []
+        for ts, p in self.frames:
+            wall = ts - o
+            if any(s <= wall < e for s, e, _ in self.pauses):
+                continue
+            frames.append((ts - self.paused(wall), p))
+        frames += [(self.t0 + o + t, p) for t, p in self.stills]
+        self.frames = sorted(frames)
 
     def _clock(self):
         """t0 and end on the frame clock."""
         o = self.offset or 0.0
-        return self.t0 + o, (self.end or time.time()) + o
+        return self.t0 + o, (self.end or time.time() - self.paused()) + o
 
     def frame_at(self, t):
         """Path of the last captured frame at or before t seconds into the recording."""

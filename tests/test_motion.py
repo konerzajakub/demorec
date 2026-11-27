@@ -123,3 +123,22 @@ def test_motion_table_in_project_toml(tmp_path):
                                            encoding="utf-8")
     with pytest.raises(SystemExit, match="cursor_easing"):
         config.load(tmp_path)
+
+
+@pytest.mark.parametrize("name", ["quad", "spring-in-out"])
+def test_new_symmetric_curves(name):
+    for u in U:
+        assert ease(name, u) + ease(name, 1 - u) == pytest.approx(1, abs=1e-3)
+
+
+def test_spring_reverse_is_the_spring_mirrored_in_time():
+    for u in U:
+        assert ease("spring-reverse", u) == pytest.approx(1 - ease("spring", 1 - u), abs=1e-9)
+    assert ease("spring-reverse", 0.5) < 0.3  # a long gentle start
+    assert 1 - ease("spring-reverse", 0.9) > 0.1  # still moving near the end, then a quick stop
+
+
+def test_spring_in_out_builds_up_fast_and_holds_an_even_middle():
+    speed = [(ease("spring-in-out", u + 0.01) - ease("spring-in-out", u - 0.01)) / 0.02 for u in (0.35, 0.5, 0.65)]
+    assert all(1.1 < v < 1.3 for v in speed)  # a broad plateau at about 1.2x the average speed
+    assert ease("spring-in-out", 0.02) < 0.01  # no jump on the first frame

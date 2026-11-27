@@ -355,7 +355,10 @@ class Actor:
         cam.move(t, view, dur if rolling else 0, easing)
         if cam.rendering():
             end = t + (dur if rolling else 0)
-            self._render_until(end)
+            if rolling and dur > 0 and self.cfg.still_zoom:
+                self._render_stills(t, end)
+            else:
+                self._render_until(end)
             if view == cam.full:
                 cam.render_off(end)
                 self._show(cam.full)
@@ -398,6 +401,30 @@ class Actor:
     def _tick(self):
         """Render mode: bring the rendered view up to date with the camera path and the scroll."""
         self._show(self.camera.at(self._now()))
+
+    def _render_stills(self, start, end):
+        """Render mode: the camera path from start to end (recording clock) frame by frame. Live,
+        a large zoom makes the browser raster the page anew at every step, it cannot keep up and
+        the video shows blank tiles and jumps. Here the recording clock pauses, every video frame
+        of the move is a still the browser renders completely, and the clock skips ahead by the
+        move's length: the video shows the move at its real pace."""
+        fps = max(self.cfg.fps, self.cfg.transition_fps)  # the video runs at one of the two
+        first, last = math.floor(start * fps) + 1, math.ceil(end * fps)
+        folder = os.path.join(self.cast.dir, "stills")
+        os.makedirs(folder, exist_ok=True)
+        self.cast.pause()
+        try:
+            for n in range(first, last + 1):
+                t = min(n / fps, end)
+                self._show(self.camera.at(t))
+                shot = self._cdp.send("Page.captureScreenshot", {"format": "jpeg", "quality": 93})
+                path = os.path.join(folder, "%06d.jpg" % len(self.cast.stills))
+                with open(path, "wb") as f:
+                    f.write(base64.b64decode(shot["data"]))
+                self.cast.add_still(t, path)
+        finally:
+            self.cast.resume(advance=end - start)
+        log("camera: %d stills from %.2fs to %.2fs" % (max(0, last - first + 1), start, end))
 
     def _render_until(self, end):
         """Render mode: play the camera path live until end (recording clock)."""
