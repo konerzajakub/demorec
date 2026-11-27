@@ -132,6 +132,8 @@ In `projects/<app>/out/<demo>/`:
 - ffmpeg encodes the frames with their real timing to H.264 at 30 fps.
 - Scene transitions cut dead time (a page load, a download) and slide from the old scene to the
   new one, like switching desktops. A video with transitions runs at 60 fps.
+- `a.choose(control, "Label")` picks from a dropdown, combobox or menu: the cursor reads down
+  the options above the label, beside their text, then clicks it.
 - Not captured, because they are outside the page: native select lists, the file dialog, the
   print dialog and the browser address bar. `AGENTS.md` describes the workarounds.
 

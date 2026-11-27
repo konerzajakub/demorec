@@ -3,7 +3,7 @@
 The mouse travels along an eased, slightly curved path, the wheel scrolls at a calm, eased pace,
 and text is typed key by key. Every method takes Playwright locators. Pauses (`hold`) are part of
 the video. Easings and durations come from [motion] in project.toml (see motion.py)."""
-import base64, math, os, time
+import base64, math, os, sys, time
 from pathlib import Path
 
 from .camera import SWITCH_HOLD, Camera, card_view, fit, follow, union
@@ -83,6 +83,27 @@ PDF_SHOW_JS = """b64 => {
   frame.style.cssText = 'border:0;width:100%;height:100%';
   box.appendChild(frame);
   document.body.appendChild(box);
+}"""
+# Roles of the entries of an open list or menu that choose() picks from.
+OPTION_ROLES = ("option", "menuitem", "menuitemradio", "menuitemcheckbox")
+# The cursor's way to the option e: points just right of the text of up to `glide` entries
+# above it in the same list or menu (only ones on screen), then of e. A text that runs to the
+# entry's edge gets the point `margin` px inside the entry's right end instead.
+PICK_PATH_JS = """(e, [glide, gap, margin]) => {
+  const sel = '[role=option],[role=menuitem],[role=menuitemradio],[role=menuitemcheckbox]';
+  const list = e.closest('[role=listbox],[role=menu],[role=menubar],[role=tree],[role=grid]') || e.parentElement;
+  const er = e.getBoundingClientRect(), top = Math.max(0, list.getBoundingClientRect().top);
+  const beside = el => {
+    const b = el.getBoundingClientRect(), range = document.createRange();
+    range.selectNodeContents(el);
+    const right = Math.max(b.left, ...[...range.getClientRects()].filter(r => r.width).map(r => r.right));
+    return [Math.min(right + gap, b.right - margin), b.top + b.height / 2 - 6];
+  };
+  const above = [...list.querySelectorAll(sel)].filter(o => {
+    const r = o.getBoundingClientRect();
+    return o !== e && !o.contains(e) && r.width && r.height && r.bottom <= er.top + 1 && r.top >= top;
+  });
+  return [...above.slice(Math.max(0, above.length - glide)), e].map(beside);
 }"""
 TWITCH = 48  # px: a least scroll this short, for a target already whole on screen, is left out
 
@@ -604,13 +625,58 @@ class Actor:
         self.pg.keyboard.type(text, delay=delay)
         self.wait(after)
 
-    def choose(self, combo, option, exact=True, after=600, fx=0.6):
-        """Open a combobox and click an option (ARIA role "option")."""
-        self.click(combo, fx=fx, after=600)
-        opt = self.pg.get_by_role("option", name=option, exact=exact).first
+    def choose(self, control, option, exact=True, after=600, fx=0.6, search=None, glide=3, rest=True):
+        """Open a select, combobox, dropdown or menu and pick an option by its label. The cursor
+        runs down the `glide` options above it, a short look at each, beside their text, then
+        clicks it. option: a label, or a list of labels for submenus (["Export", "PDF"]).
+        Options are ARIA options or menu items. search: text typed into the control first, for
+        a combobox that filters as you type. A native <select> gets the click, then the value
+        is set (its open list is drawn by the OS and never recorded). rest: afterwards the
+        cursor steps off to beside the control, so the chosen value is readable."""
+        path = [option] if isinstance(option, str) else list(option)
+        control = control.first
+        if control.evaluate("e => e.tagName") == "SELECT":
+            self.click(control, fx=fx, after=200)
+            control.select_option(path[-1])
+            if sys.platform == "darwin":  # headless Chrome on macOS opens no list, Escape would close a dialog
+                self.wait(after)
+            else:
+                self.key("Escape", after=after)
+        else:
+            if search is not None:
+                self.type(control, search, clear=True)
+            else:
+                self.click(control, fx=fx, after=600)
+            for i, label in enumerate(path):
+                self._pick(self._option(label, exact), glide, after if i == len(path) - 1 else 500)
+        if rest:
+            try:
+                visible = control.is_visible()
+            except Exception:
+                visible = False
+            if visible:
+                self.rest(control, scroll=False)
+
+    def _option(self, label, exact=True):
+        """The visible option or menu item named label, once it is there."""
+        loc = None
+        for role in OPTION_ROLES:
+            r = self.pg.get_by_role(role, name=label, exact=exact)
+            loc = r if loc is None else loc.or_(r)
+        opt = loc.filter(visible=True).first
         opt.wait_for(state="visible", timeout=10000)
-        opt.scroll_into_view_if_needed(); self.wait(250)
-        self.click(opt, fx=0.3, scroll=False, after=after)
+        return opt
+
+    def _pick(self, opt, glide=3, after=600):
+        """Click an open list's option the way a person reads a list: the cursor passes the
+        glide options above it, then lands on it, each time just right of the text."""
+        if abs(opt.evaluate(SCROLLER_JS, "nearest")) >= 1:
+            self.center(opt, block="nearest")  # the list's own scroll area glides to it
+        points = opt.evaluate(PICK_PATH_JS, [glide, 14, 20])
+        for x, y in points[:-1]:
+            self.move(x, y)
+            self.wait(220)
+        self.click_at(*points[-1], after=after)
 
     def key(self, k, after=300):
         """Press a key or a chord, e.g. "Enter", "ControlOrMeta+A"."""

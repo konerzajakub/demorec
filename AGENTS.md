@@ -78,8 +78,18 @@ Run logs go to files, never stream them.
   a scratch demo whose name starts with `_` (`new-demo <project> _probe`), put the steps into its
   `setup(a)` and run `inspect <project> --demo _probe`. `list` and the tests skip `_` demos.
   Delete it when done.
-- Native `<select>` and file pickers are drawn by the OS and are not captured. Show the click,
-  then set the value with Playwright (see `projects/example/helpers.py`).
+- Selects, dropdowns, comboboxes and menus: `a.choose(control, "Label")` opens the control and
+  picks the option or menu item with that label. The cursor runs down the 3 entries above it
+  (`glide=3`, 0 goes straight), each just right of its text, then clicks it, and finally steps
+  off beside the control so the chosen value is readable (`rest=False` stays). A long list's own
+  scroll area glides to the option first.
+  - Submenus: `a.choose(menu_button, ["Export", "PDF"])`.
+  - A combobox that filters as you type: `a.choose(field, "Gamma Labs", search="gam")`.
+  - `exact=False` matches a part of the label.
+  - A native `<select>` is drawn by the OS and never captured: `choose` shows the click and sets
+    the value (its label or value).
+  - Plain navigation links are no menu: `a.click(nav.get_by_role("link", name="Reports"))`.
+- File pickers are drawn by the OS and are not captured. Set the files with Playwright.
 - The browser print dialog is not captured. Use `a.print_preview()`.
 - Downloads: `a.download(locator, name)` returns the path, `a.show_file(path)` shows it in a
   window of its own and returns to the app in one call.
