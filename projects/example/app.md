@@ -33,8 +33,8 @@ Nothing to start. Reset is a page reload, which every run does.
 
 - Labels are English. Form fields have `<label for>`, so `get_by_label("Title")` works.
 - The table has the accessible name `Tasks`.
-- The Status filter is a native `<select>`: use `locator.select_option()`, Actor.choose() is
-  for ARIA comboboxes.
+- The Status filter and the Owner field are native `<select>`s: `a.choose(select, "Open")` shows
+  the click and sets the value, the open list itself is drawn by the OS and never recorded.
 
 ## Pitfalls
 

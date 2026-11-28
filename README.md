@@ -47,7 +47,11 @@ Scripted demo videos of web applications.
 
 ![The video opens with the app title filling the frame and zooms out to the whole app](docs/media/motion/opening-zoom-out.gif)
 
-- A demo can open on a small element, here the title zoomed about 10x, and zoom out to the app.
+- A demo can open on a small element, here the title zoomed about 10x, and zoom out to the app,
+  or end by zooming into one.
+- Such deep zooms are rendered frame by frame: every frame is complete, without the blank tiles
+  a live 10x zoom shows, and the video still plays the move at its real pace.
+- The zoom changes at an even pace on a log scale, so 10x to 5x takes as long as 2x to 1x.
 - Zooms use a critically damped spring by default, Apple's default animation: a quick start and
   a long soft landing.
 - Camera pans have their own, softer easing (`ease-in-out-soft`) and duration: a gentle start and
@@ -123,9 +127,13 @@ In `projects/<app>/out/<demo>/`:
   projector. The page layout is never changed.
   - Up to 1.5x (`crop_zoom`), ffmpeg crops and scales the frames.
   - Above it, the browser renders the view magnified, sharp up to `max_zoom` (12x).
+  - Zooms above it are rendered as stills, one per video frame, while the recording clock
+    pauses (`still_zoom`).
 - ffmpeg encodes the frames with their real timing to H.264 at 30 fps.
 - Scene transitions cut dead time (a page load, a download) and slide from the old scene to the
   new one, like switching desktops. A video with transitions runs at 60 fps.
+- `a.choose(control, "Label")` picks from a dropdown, combobox or menu: the cursor reads down
+  the options above the label, beside their text, then clicks it.
 - Not captured, because they are outside the page: native select lists, the file dialog, the
   print dialog and the browser address bar. `AGENTS.md` describes the workarounds.
 

@@ -14,7 +14,7 @@ def scene(a):
     a.click(pg.get_by_role("button", name="New task"), after=700)
     dlg = a.dialog()
     a.type(dlg.get_by_label("Title"), "Check the fume hood")
-    pick(a, dlg.get_by_label("Owner"), "Operator Two", after=400)
+    a.choose(dlg.get_by_label("Owner"), "Operator Two", after=400)
     due = dlg.get_by_label("Due date")
     a.click(due, fx=0.15, after=200)
     due.evaluate("e => { e.blur(); e.focus(); }")  # start at the month, the click can hit another part
@@ -29,5 +29,5 @@ def scene(a):
     a.hold(1.0)
 
     a.chapter("Open tasks")
-    pick(a, pg.get_by_label("Status"), "open")
+    a.choose(pg.get_by_label("Status"), "Open")
     a.hold(2.0)

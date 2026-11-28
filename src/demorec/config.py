@@ -42,6 +42,8 @@ class Config:
     max_zoom: float = 12.0        # Actor.zoom never zooms in further
     crop_zoom: float = 1.5        # zooms up to this crop the recorded frames, larger ones are rendered
                                   # magnified by the browser, sharp at any zoom (see camera.py)
+    still_zoom: bool = True       # zoom and zoom_out above crop_zoom are rendered frame by frame,
+                                  # never with blank tiles; false plays them live (Actor._render_stills)
     zoom_easing: str = "spring"   # [motion] easing of zoom and zoom_out, names in motion.py
     zoom_duration: float = 1.0    # [motion] s, default dur of zoom and zoom_out
     pan_easing: str = PAN_DEFAULT   # [motion] easing of camera pans at a steady zoom
@@ -66,7 +68,8 @@ TABLE_FIELDS = {
     "app": ("ready",),
     "browser": ("width", "height", "locale", "timezone", "channel", "safe_top", "safe_bottom", "fixed_header", "scroll",
                 "scroll_land"),
-    "recording": ("fps", "crf", "scale", "video_scale", "max_zoom", "crop_zoom", "before", "transition_fps"),
+    "recording": ("fps", "crf", "scale", "video_scale", "max_zoom", "crop_zoom", "still_zoom", "before",
+                  "transition_fps"),
     "motion": ("zoom_easing", "zoom_duration", "pan_easing", "pan_duration", "cursor_easing", "cursor_speed",
                "cursor_curve", "scroll_easing", "scroll_speed", "transition_easing", "transition_duration"),
 }
